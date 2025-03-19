@@ -33,19 +33,31 @@ git clone https://github.com/isaac-sim/IsaacLabExtensionTemplate.git
 git clone git@github.com:isaac-sim/IsaacLabExtensionTemplate.git
 ```
 
+<<<<<<< HEAD
 - Throughout the repository, the name `spinal_surgery` only serves as an example and we provide a script to rename all the references to it automatically:
+=======
+- Throughout the repository, the name `ext_template` only serves as an example and we provide a script to rename all the references to it automatically:
+>>>>>>> 7a047668b398729881c89e885607c1aa81abe941
 
 ```bash
 # Enter the repository
 cd IsaacLabExtensionTemplate
+<<<<<<< HEAD
 # Rename all occurrences of spinal_surgery (in files/directories) to your_fancy_extension_name
+=======
+# Rename all occurrences of ext_template (in files/directories) to your_fancy_extension_name
+>>>>>>> 7a047668b398729881c89e885607c1aa81abe941
 python scripts/rename_template.py your_fancy_extension_name
 ```
 
 - Using a python interpreter that has Isaac Lab installed, install the library
 
 ```bash
+<<<<<<< HEAD
 python -m pip install -e source/spinal_surgery
+=======
+python -m pip install -e source/ext_template
+>>>>>>> 7a047668b398729881c89e885607c1aa81abe941
 ```
 
 - Verify that the extension is correctly installed by running the following command:
@@ -64,7 +76,11 @@ If everything executes correctly, it should create a file .python.env in the `.v
 
 ### Setup as Omniverse Extension (Optional)
 
+<<<<<<< HEAD
 We provide an example UI extension that will load upon enabling your extension defined in `source/spinal_surgery/spinal_surgery/ui_extension_example.py`.
+=======
+We provide an example UI extension that will load upon enabling your extension defined in `source/ext_template/ext_template/ui_extension_example.py`.
+>>>>>>> 7a047668b398729881c89e885607c1aa81abe941
 
 To enable your extension, follow these steps:
 
@@ -177,7 +193,11 @@ In some VsCode versions, the indexing of part of the extensions is missing. In t
 ```json
 {
     "python.analysis.extraPaths": [
+<<<<<<< HEAD
         "<path-to-ext-repo>/source/spinal_surgery"
+=======
+        "<path-to-ext-repo>/source/ext_template"
+>>>>>>> 7a047668b398729881c89e885607c1aa81abe941
     ]
 }
 ```

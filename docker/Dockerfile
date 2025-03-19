@@ -13,7 +13,11 @@ COPY ../ ${DOCKER_ISAACLAB_EXTENSION_TEMPLATE_PATH}
 
 # # Install whatever you need as additional dependencies.
 RUN bash -i -c "source ${HOME}/.bashrc && \
+<<<<<<< HEAD
     cd ${DOCKER_ISAACLAB_EXTENSION_TEMPLATE_PATH}/source/spinal_surgery && \
+=======
+    cd ${DOCKER_ISAACLAB_EXTENSION_TEMPLATE_PATH}/source/ext_template && \
+>>>>>>> 7a047668b398729881c89e885607c1aa81abe941
     pip install -e ."
 
 # make working directory as the Isaac Lab directory
