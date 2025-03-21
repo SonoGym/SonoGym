@@ -165,14 +165,14 @@ class SurfaceMotionPlanner(HumanFrameViewer):
             record_tape=False
         )
         
-        human_to_ee_target_quat = wp.to_torch(self.target_quat_wp)[:, [3, 0, 1, 2]]
+        self.human_to_ee_target_quat = wp.to_torch(self.target_quat_wp)[:, [3, 0, 1, 2]]
         # human_to_ee_target_quat = torch.zeros((self.num_envs, 4), device=self.device)
-        human_to_ee_target_pos = self.target_position * self.label_res - self.target_rot_mat[:, :, 2] * self.height
+        self.human_to_ee_target_pos = self.target_position * self.label_res - self.target_rot_mat[:, :, 2] * self.height
 
 
         # get world to human position
         world_to_ee_target_pos, world_to_ee_target_rot = combine_frame_transforms(
-            world_to_human_pos, world_to_human_rot, human_to_ee_target_pos, human_to_ee_target_quat
+            world_to_human_pos, world_to_human_rot, self.human_to_ee_target_pos, self.human_to_ee_target_quat
         )
 
         return world_to_ee_target_pos, world_to_ee_target_rot

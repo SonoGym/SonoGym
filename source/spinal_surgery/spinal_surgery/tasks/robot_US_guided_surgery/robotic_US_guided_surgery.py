@@ -105,7 +105,7 @@ scale = 1/label_res
 
 
 @configclass
-class roboticUSEnvCfg(DirectRLEnvCfg):
+class roboticSurgeryEnvCfg(DirectRLEnvCfg):
     # env
     decimation = 2
     episode_length_s = 10
@@ -131,10 +131,10 @@ class roboticUSEnvCfg(DirectRLEnvCfg):
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=100, env_spacing=4.0, replicate_physics=False)
 
 
-class roboticUSEnv(DirectRLEnv):
-    cfg: roboticUSEnvCfg
+class roboticSurgeryEnv(DirectRLEnv):
+    cfg: roboticSurgeryEnvCfg
 
-    def __init__(self, cfg: roboticUSEnvCfg, render_mode: str | None = None, **kwargs):
+    def __init__(self, cfg: roboticSurgeryEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
         self.robot_entity_cfg = SceneEntityCfg("robot_US", joint_names=["lbr_joint_.*"], body_names=["lbr_link_ee"])

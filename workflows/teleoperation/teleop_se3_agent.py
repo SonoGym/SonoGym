@@ -106,6 +106,8 @@ def main():
     # reset environment
     env.reset()
     teleop_interface.reset()
+    if hasattr(env, "max_episode_length"):
+        env.max_episode_length = 10000
 
     # simulate environment
     while simulation_app.is_running():

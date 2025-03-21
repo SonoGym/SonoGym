@@ -11,8 +11,8 @@ class USSlicer(LabelImgSlicer):
     # Function: slice_US
     # Function: update_plotter
     def __init__(self, us_cfg, label_maps, ct_maps, if_use_ct, human_list, num_envs, x_z_range, init_x_z_x_angle, device, label_convert_map,
-                 img_size, img_res, label_res=0.0015, max_distance=0.02, # [m]
-                 body_label=120, height = 0.13, height_img = 0.132,
+                 img_size, img_res, label_res=0.0015, max_distance=0.03, # [m]
+                 body_label=120, height = 0.13, height_img = 0.133,
                  visualize=True, plane_axes={'h': [0, 0, 1], 'w': [1, 0, 0]}):
         '''
         label maps: list of label maps (3D volumes)
@@ -194,15 +194,18 @@ class USSlicer(LabelImgSlicer):
             self.ct_img_tensor.permute(0, 2, 1)) # (n, H, W)
 
 
-    def visualize(self, first_n=20):
-        super().visualize(first_n)
-        first_n = min(first_n, self.num_envs)
+    def visualize(self, key, first_n=20):
+        if key=='CT' or key=='seg':
+            super().visualize(key, first_n)
+        elif key=='US':
+            first_n = min(first_n, self.num_envs)
 
-        combined_US_img = self.us_img_tensor[:first_n, :, :].permute(0, 2, 1).reshape((first_n * self.img_size[0], self.img_size[1])) # (w * first_n, h)
+            combined_US_img = self.us_img_tensor[:first_n, :, :].permute(0, 2, 1).reshape((first_n * self.img_size[0], self.img_size[1])) # (w * first_n, h)
 
-        combined_img_np = combined_US_img.cpu().numpy()
+            combined_img_np = combined_US_img.cpu().numpy()
 
-        cv2.imshow("US Image Update", combined_img_np.T / 20)
-        cv2.waitKey(1)
-
+            cv2.imshow("US Image Update", combined_img_np.T / 20)
+            cv2.waitKey(1)
+        else:
+            raise ValueError(f"Invalid visualization key {key}.")
 

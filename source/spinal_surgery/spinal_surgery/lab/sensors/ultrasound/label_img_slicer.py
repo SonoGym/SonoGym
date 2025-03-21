@@ -168,23 +168,28 @@ class LabelImgSlicer(SurfaceMotionPlanner):
         return smoothed_seg
     
     
-    def visualize(self, first_n=20):
+    def visualize(self, key, first_n=20):
         '''
         visualize label image by combine'''
         first_n = min(first_n, self.num_envs)
 
-        combined_img = self.label_img_tensor[:first_n, :, :].reshape((first_n * self.img_size[0], self.img_size[1])) # (w * first_n, h)
+        if key=='seg':
 
-        combined_img_np = combined_img.cpu().numpy()
+            combined_img = self.label_img_tensor[:first_n, :, :].reshape((first_n * self.img_size[0], self.img_size[1])) # (w * first_n, h)
 
-        cv2.imshow("Label Image Update", combined_img_np.T / np.max(combined_img_np))
-        cv2.waitKey(1)
+            combined_img_np = combined_img.cpu().numpy()
 
-        combined_ct = self.ct_img_tensor[:first_n, :, :].reshape((first_n * self.img_size[0], self.img_size[1])) # (w * first_n, h)
+            cv2.imshow("Label Image Update", combined_img_np.T / np.max(combined_img_np))
+            cv2.waitKey(1)
+        elif key=='CT':
 
-        combined_ct_np = combined_ct.cpu().numpy()
+            combined_ct = self.ct_img_tensor[:first_n, :, :].reshape((first_n * self.img_size[0], self.img_size[1])) # (w * first_n, h)
 
-        cv2.imshow("Ct Image Update", combined_ct_np.T / np.max(combined_ct_np))
-        cv2.waitKey(1)
+            combined_ct_np = combined_ct.cpu().numpy()
+
+            cv2.imshow("Ct Image Update", combined_ct_np.T / np.max(combined_ct_np))
+            cv2.waitKey(1)
+        else:
+            raise ValueError('Invalid visualization key')
 
         return
