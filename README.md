@@ -153,6 +153,23 @@ docker compose --env-file .env.base --file docker-compose.yaml down
 
 This stops and removes the containers, but keeps the images.
 
+## Cluster Setup 
+### Configuring cluster parameters and export to sigularity image
+Copy the ```docker/cluster_extension``` folder to ```IsaacLab/docker```.
+Follow https://isaac-sim.github.io/IsaacLab/main/source/deployment/cluster.html, configure the cluster parameters and export to singularity image by running under ```IsaacLab```:
+```
+./docker/cluster_extension/cluster_interface.sh push
+```
+By default, it will export the image named ```isaac-lab-template```.
+
+### Submitting a job
+Import your extension template in the file specified by ```CLUSTER_PYTHON_EXECUTABLE``` in ```.env.cluster```
+```
+./docker/cluster/cluster_interface.sh job "argument1" "argument2" ...
+```
+By default, it will submit a job with image ```isaac-lab-template```. You can change ```profile="template"``` to your own profile name at line ```138``` in ```docker/cluster_extension/cluster_interface.sh```.
+
+
 ## Code formatting
 
 We have a pre-commit template to automatically format your code.

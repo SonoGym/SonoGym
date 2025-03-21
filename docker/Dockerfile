@@ -11,6 +11,11 @@ USER root
 # Copy the Isaac Lab Extension Template directory (files to exclude are defined in .dockerignore)
 COPY ../ ${DOCKER_ISAACLAB_EXTENSION_TEMPLATE_PATH}
 
+RUN ${ISAACLAB_PATH}/isaaclab.sh -p -m pip install pyvista
+RUN ${ISAACLAB_PATH}/isaaclab.sh -p -m pip install ruamel.yaml
+RUN ${ISAACLAB_PATH}/isaaclab.sh -p -m pip install pydicom
+RUN ${ISAACLAB_PATH}/isaaclab.sh -p -m pip install nibabel
+
 # # Install whatever you need as additional dependencies.
 RUN bash -i -c "source ${HOME}/.bashrc && \
     cd ${DOCKER_ISAACLAB_EXTENSION_TEMPLATE_PATH}/source/spinal_surgery && \

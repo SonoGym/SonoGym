@@ -1,3 +1,9 @@
+
+robot_drill:
+  pos: [0.0, 1.0, 0.5]
+  euler_yxz: [0.0, 0.0, 180.0]
+  joint_pos: [1.5, -0.1, 0.0, -1.6, 0.0, 1.6, 0.0]
+
 robot:
   pos: [0.0, -0.75, 0.5]
   joint_pos: [1.5, -0.1, 0.0, -1.6, 0.0, 1.6, 0.0]
@@ -11,7 +17,7 @@ patient:
 bed:
   pos: [0.0, 0.0, 0.3]
   euler_xyz: [90, 0.0, 90]
-  scale: 0.001
+  scale: 0.0005
 
 motion_planning:
   patient_xz_goal: [150, 170, 2.0]
