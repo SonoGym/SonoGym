@@ -16,7 +16,7 @@ parser = argparse.ArgumentParser(description="Keyboard teleoperation for Isaac L
 parser.add_argument(
     "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
 )
-parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to simulate.")
+parser.add_argument("--num_envs", type=int, default=2, help="Number of environments to simulate.")
 parser.add_argument("--teleop_device", type=str, default="keyboard", help="Device for interacting with environment")
 parser.add_argument("--task", type=str, default='Isaac-robot-US-guidance-v0', help="Name of the task.")
 parser.add_argument("--sensitivity", type=float, default=5.0, help="Sensitivity factor.")
@@ -44,7 +44,7 @@ import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.manager_based.manipulation.lift import mdp
 from isaaclab_tasks.utils import parse_env_cfg
 import spinal_surgery
-
+import cProfile
 
 def pre_process_actions(delta_pose: torch.Tensor, gripper_command: bool) -> torch.Tensor:
     """Pre-process actions for the environment."""
@@ -110,9 +110,11 @@ def main():
         env.max_episode_length = 10000
 
     # simulate environment
-    while simulation_app.is_running():
+    step = 0
+    while simulation_app.is_running() and step < 1000:
         # run everything in inference mode
         with torch.inference_mode():
+            step +=1 
             # get keyboard command
             delta_pose, gripper_command = teleop_interface.advance()
             delta_pose = delta_pose.astype("float32")
@@ -129,6 +131,10 @@ def main():
 
 if __name__ == "__main__":
     # run the main function
+    profiler = cProfile.Profile()
+    profiler.enable()
     main()
+    profiler.disable()
+    profiler.dump_stats("main_stats.prof")
     # close sim app
     simulation_app.close()

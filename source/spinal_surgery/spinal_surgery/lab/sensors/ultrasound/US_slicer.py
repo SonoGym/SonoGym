@@ -11,7 +11,7 @@ class USSlicer(LabelImgSlicer):
     # Function: slice_US
     # Function: update_plotter
     def __init__(self, us_cfg, label_maps, ct_maps, if_use_ct, human_list, num_envs, x_z_range, init_x_z_x_angle, device, label_convert_map,
-                 img_size, img_res, label_res=0.0015, max_distance=0.03, # [m]
+                 img_size, img_res, img_thickness=1, label_res=0.0015, max_distance=0.03, # [m]
                  body_label=120, height = 0.13, height_img = 0.133,
                  visualize=True, plane_axes={'h': [0, 0, 1], 'w': [1, 0, 0]}):
         '''
@@ -31,7 +31,7 @@ class USSlicer(LabelImgSlicer):
         visualize: whether to visualize the human frame
         '''
         super().__init__(label_maps, ct_maps, human_list, num_envs, x_z_range, init_x_z_x_angle, device, label_convert_map,
-                 img_size, img_res, label_res, max_distance,
+                 img_size, img_res, img_thickness, label_res, max_distance,
                  body_label, height, height_img,
                  visualize, plane_axes)
         self.us_sim = USSimulatorConv(us_cfg, device=device)
@@ -64,7 +64,8 @@ class USSlicer(LabelImgSlicer):
         # create position list
         # env to human
         self.env_to_human_inds = torch.arange(self.num_envs, device=self.device) % self.n_human_types # (N,)
-        self.env_to_human_inds_aug = self.env_to_human_inds.reshape((-1, 1)).repeat(1, self.img_size[0]*self.img_size[1]) # (N, H, W)
+        self.env_to_human_inds_aug = self.env_to_human_inds.reshape((-1, 1)).repeat(1, 
+                                        self.img_size[0]*self.img_size[1]*self.img_thickness) # (N, H, W)
         
 
         self.T_rand_frame_poses = []
@@ -94,22 +95,23 @@ class USSlicer(LabelImgSlicer):
         self.T1_map = torch.normal(self.T0_map_mu, self.T0_map_s)
         self.T0_T1_map = torch.randn((self.n_human_types, size_xz[0], size_y, size_xz[1], 2), device=self.device) # (n, X, Y, Z, 2)
 
-        self.rand_coords_min = torch.zeros((self.num_envs, self.img_size[0] * self.img_size[1], 3), device=self.device)
+        self.rand_coords_min = torch.zeros((self.num_envs, self.img_size[0] * self.img_size[1]*self.img_thickness, 3), device=self.device)
         self.rand_coords_max = torch.tensor(self.T0_T1_map[0].shape[:-1], device=self.device).repeat(
-                self.num_envs, self.img_size[0] * self.img_size[1], 1) - 1
+                self.num_envs, self.img_size[0] * self.img_size[1] * self.img_thickness, 1) - 1
         
 
 
     def construct_Vl_maps(self):
         # construct Vl img coordinates
         l_img_size = self.us_cfg['large_scale_resolution']
-        self.env_to_human_inds_Vl = self.env_to_human_inds.reshape((-1, 1)).repeat(1, l_img_size*l_img_size)
+        self.env_to_human_inds_Vl = self.env_to_human_inds.reshape((-1, 1)).repeat(1, l_img_size*l_img_size*l_img_size)
 
         l_arange = torch.arange(l_img_size, device=self.device)
-        self.l_x_grid, self.l_z_grid = torch.meshgrid(l_arange - l_img_size//2, 
-                                                  l_arange)
-        self.l_y_grid = torch.zeros_like(self.l_x_grid, device=self.device)
-        self.l_img_coords = torch.stack([self.l_x_grid, self.l_y_grid, self.l_z_grid], dim=-1).reshape((-1, 3)).float() * self.label_res # (l*l, 3)
+        self.l_x_grid, self.l_z_grid, self.l_y_grid = torch.meshgrid(l_arange - l_img_size//2, 
+                                                  l_arange,
+                                                  l_arange - l_img_size//2)
+        # self.l_y_grid = torch.zeros_like(self.l_x_grid, device=self.device)
+        self.l_img_coords = torch.stack([self.l_x_grid, self.l_y_grid, self.l_z_grid], dim=-1).reshape((-1, 3)).float() * self.label_res # (l*l*l, 3)
 
         # create coordinate system
         self.Vl_rand_frame_poses = []
@@ -151,7 +153,7 @@ class USSlicer(LabelImgSlicer):
             world_to_human_pos,
             world_to_human_quat,
             world_to_ee_pos,
-            world_to_ee_quat) # (num_envs, l*l, 3)
+            world_to_ee_quat) # (num_envs, l*l*l, 3)
         
         self.rand_frame_img_coords = self.human_img_coords * self.label_res - self.T_rand_frame_poses_aug
         self.rand_frame_img_coords = self.rand_frame_img_coords / self.img_res
@@ -171,36 +173,45 @@ class USSlicer(LabelImgSlicer):
                 self.rand_frame_img_coords[:, :, 0].int(), 
                 self.rand_frame_img_coords[:, :, 1].int(), 
                 self.rand_frame_img_coords[:, :, 2].int(), :
-            ].reshape((-1, self.img_size[0], self.img_size[1], 2))
+            ].reshape((-1, self.img_size[0], self.img_size[1], self.img_thickness, 2))
         
         self.Vl_img_tensor = self.Vl_map[self.env_to_human_inds_Vl,
                 self.Vl_frame_img_coords[:, :, 0].int(), 
                 self.Vl_frame_img_coords[:, :, 1].int(), 
                 self.Vl_frame_img_coords[:, :, 2].int()
-            ].reshape((-1, l_img_size, l_img_size))
+            ].reshape((-1, l_img_size, l_img_size, l_img_size))
 
 
     def slice_US(self, world_to_human_pos, world_to_human_quat, world_to_ee_pos, world_to_ee_quat):
         self.slice_label_img(world_to_human_pos, world_to_human_quat, world_to_ee_pos, world_to_ee_quat)
         # self.us_img_tensor = self.us_sim.simulate_US_image(self.label_img_tensor.permute(0, 2, 1), False) # (n, H, W)
         self.slice_rand_maps(world_to_human_pos, world_to_human_quat, world_to_ee_pos, world_to_ee_quat)
+        # reshape images for simulation
+        label_img_tensor = self.label_img_tensor.permute(0, 3, 2, 1).reshape((-1, self.img_size[1], self.img_size[0])) # (n*e, H, W)
+        T0_img_tensor = self.T0_T1_img_tensor[:, :, :, :, 0].permute(0, 3, 2, 1).reshape((-1, self.img_size[1], self.img_size[0])) # (n*e, H, W)
+        T1_img_tensor = self.T0_T1_img_tensor[:, :, :, :, 1].permute(0, 3, 2, 1).reshape((-1, self.img_size[1], self.img_size[0]))
+        l_img_size = self.us_cfg['large_scale_resolution']
+        Vl_img_tensor = self.Vl_img_tensor.permute(0, 3, 2, 1).reshape((-1, l_img_size, l_img_size)) # (n*l, l, l)
+        ct_img_tensor = self.ct_img_tensor.permute(0, 3, 2, 1).reshape((-1, self.img_size[1], self.img_size[0])) # (n*e, H, W)
         self.us_img_tensor = self.us_sim.simulate_US_image_given_rand_map(
-            self.label_img_tensor.permute(0, 2, 1), 
-            self.T0_T1_img_tensor[:, :, :, 0].permute(0, 2, 1), 
-            self.T0_T1_img_tensor[:, :, :, 1].permute(0, 2, 1), 
-            self.Vl_img_tensor.permute(0, 2, 1), 
+            label_img_tensor, 
+            T0_img_tensor, 
+            T1_img_tensor, 
+            Vl_img_tensor, 
             False,
             self.if_use_ct,
-            self.ct_img_tensor.permute(0, 2, 1)) # (n, H, W)
+            ct_img_tensor) # (n*e, H, W)
+        self.us_img_tensor = self.us_img_tensor.reshape((self.num_envs, -1, self.img_size[1], self.img_size[0])).permute(0, 2, 3, 1) # (n, H, W, e)
 
 
     def visualize(self, key, first_n=20):
-        if key=='CT' or key=='seg':
-            super().visualize(key, first_n)
-        elif key=='US':
+        super().visualize(key, first_n)
+        # if key=='CT' or key=='seg':
+        #     super().visualize(key, first_n)
+        if key=='US':
             first_n = min(first_n, self.num_envs)
 
-            combined_US_img = self.us_img_tensor[:first_n, :, :].permute(0, 2, 1).reshape((first_n * self.img_size[0], self.img_size[1])) # (w * first_n, h)
+            combined_US_img = self.us_img_tensor[:first_n, :, 0, :].permute(0, 2, 1).reshape((-1, self.img_size[1])) # (w * first_n, h)
 
             combined_img_np = combined_US_img.cpu().numpy()
 

@@ -33,6 +33,7 @@ from spinal_surgery.lab.sensors.ultrasound.US_slicer import USSlicer
 from ruamel.yaml import YAML
 from spinal_surgery import PACKAGE_DIR
 from spinal_surgery.lab.kinematics.gt_motion_generator import GTMotionGenerator, GTDiscreteMotionGenerator
+import cProfile
 
 scene_cfg = YAML().load(open(f"{PACKAGE_DIR}/tasks/robot_US_guidance/cfgs/robotic_US_guidance.yaml", 'r'))
 
@@ -148,6 +149,10 @@ class roboticUSEnv(DirectRLEnv):
         self.sim_cfg = scene_cfg['sim']
         self.init_cmd_pose_min = torch.tensor(self.sim_cfg['patient_xz_init_range'][0], device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
         self.init_cmd_pose_max = torch.tensor(self.sim_cfg['patient_xz_init_range'][1], device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
+        if scene_cfg['observation']['3D']:
+            img_thickness = us_cfg['image_3D_thickness']
+        else:
+            img_thickness = 1
         self.US_slicer = USSlicer(
             us_cfg,
             label_map_list, 
@@ -161,6 +166,7 @@ class roboticUSEnv(DirectRLEnv):
             label_convert_map,
             us_cfg['image_size'], 
             us_cfg['resolution'],
+            img_thickness=img_thickness,
             visualize=self.sim_cfg['vis_seg_map'],
         )
         self.US_slicer.current_x_z_x_angle_cmd = (self.init_cmd_pose_min + self.init_cmd_pose_max) / 2

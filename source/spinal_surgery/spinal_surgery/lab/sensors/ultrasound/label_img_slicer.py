@@ -12,7 +12,7 @@ class LabelImgSlicer(SurfaceMotionPlanner):
     # Function: slice_label_img
     # Function: update_plotter
     def __init__(self, label_maps, ct_maps, human_list, num_envs, x_z_range, init_x_z_x_angle, device, label_convert_map,
-                 img_size, img_res, label_res=0.0015, max_distance=0.015, # [m]
+                 img_size, img_res, img_thickness=1, label_res=0.0015, max_distance=0.015, # [m]
                  body_label=120, height = 0.1, height_img = 0.1,
                  visualize=True, plane_axes={'h': [0, 0, 1], 'w': [1, 0, 0]}):
         '''
@@ -35,6 +35,7 @@ class LabelImgSlicer(SurfaceMotionPlanner):
         super().__init__(label_maps, human_list, num_envs, x_z_range, init_x_z_x_angle, device, label_res, body_label, height, height_img, visualize, plane_axes)
         self.img_size = img_size
         self.img_res = img_res
+        self.img_thickness = img_thickness
         self.max_distance = max_distance
         self.img_real_size = [img_size[0] * img_res, img_size[1] * img_res]
         self.height_img = height_img
@@ -47,18 +48,19 @@ class LabelImgSlicer(SurfaceMotionPlanner):
                 self.label_maps[i][self.label_maps[i] == key] = value
 
         # construct images
-        self.label_img_tensor = torch.zeros((self.num_envs, self.img_size[0], self.img_size[1]), 
+        self.label_img_tensor = torch.zeros((self.num_envs, self.img_size[0], self.img_size[1], self.img_thickness), 
                                             dtype=torch.uint8, 
                                             device=self.device) # (num_envs, w, h)
-        self.ct_img_tensor = torch.zeros((self.num_envs, self.img_size[0], self.img_size[1]), 
+        self.ct_img_tensor = torch.zeros((self.num_envs, self.img_size[0], self.img_size[1], self.img_thickness), 
                                             dtype=torch.uint8, 
                                             device=self.device) # (num_envs, w, h)
 
         # construct grids
-        self.x_grid, self.z_grid = torch.meshgrid(torch.arange(self.img_size[0], device=self.device) - self.img_size[0]//2, 
-                                                  torch.arange(self.img_size[1], device=self.device))
-        self.y_grid = torch.zeros_like(self.x_grid, device=self.device)
-        self.img_coords = torch.stack([self.x_grid, self.y_grid, self.z_grid], dim=-1).reshape((-1, 3)).float() * img_res # (w * h, 3)
+        self.x_grid, self.z_grid, self.y_grid = torch.meshgrid(torch.arange(self.img_size[0], device=self.device) - self.img_size[0]//2, 
+                                                torch.arange(self.img_size[1], device=self.device),
+                                                torch.arange(self.img_thickness, device=self.device) - self.img_thickness//2) # (w, h, e, 1)
+        # self.y_grid = torch.zeros_like(self.x_grid, device=self.device)
+        self.img_coords = torch.stack([self.x_grid, self.y_grid, self.z_grid], dim=-1).reshape((-1, 3)).float() * img_res # (w * h * e, 3)
 
         # smoothing
         self.kernel = self.gaussian_kernel()
@@ -98,7 +100,7 @@ class LabelImgSlicer(SurfaceMotionPlanner):
             self.img_coords,
             world_to_human_pos, 
             world_to_human_quat, 
-            world_to_ee_pos, world_to_ee_quat) # (num_envs, w*h, 3)
+            world_to_ee_pos, world_to_ee_quat) # (num_envs, w*h*e, 3)
         
         # speed up the slicing
         for i in range(self.n_human_types):
@@ -106,12 +108,12 @@ class LabelImgSlicer(SurfaceMotionPlanner):
                 self.human_img_coords[i::self.n_human_types, :, 0].int(), 
                 self.human_img_coords[i::self.n_human_types, :, 1].int(), 
                 self.human_img_coords[i::self.n_human_types, :, 2].int()
-            ].reshape((-1, self.img_size[0], self.img_size[1]))
+            ].reshape((-1, self.img_size[0], self.img_size[1], self.img_thickness))
             self.ct_img_tensor[i::self.n_human_types, :, :] = self.ct_maps[i % self.n_human_types][
                 self.human_img_coords[i::self.n_human_types, :, 0].int(), 
                 self.human_img_coords[i::self.n_human_types, :, 1].int(), 
                 self.human_img_coords[i::self.n_human_types, :, 2].int()
-            ].reshape((-1, self.img_size[0], self.img_size[1]))
+            ].reshape((-1, self.img_size[0], self.img_size[1], self.img_thickness)) # (num_envs, w, h, e)
 
 
         # smooth
@@ -125,11 +127,11 @@ class LabelImgSlicer(SurfaceMotionPlanner):
         '''
         get distances from label image tensor (N, W, H)
         '''
-        B, W, H = label_img_tensor.shape
+        B, W, H, E = label_img_tensor.shape
 
         # Find the first nonzero index along the height dimension (axis=1)
-        first_nonzero = torch.argmax((label_img_tensor > 0).int(), dim=2) # (N, W)
-        return torch.min(first_nonzero, dim=1).values # (N, )
+        first_nonzero = torch.argmax((label_img_tensor > 0).int(), dim=2) # (N, W, E)
+        return torch.amin(first_nonzero, dim=(1, 2)) # (N, )
 
     def check_collision(self, label_img_tensor, ct_img_tensor):
         '''
@@ -173,17 +175,17 @@ class LabelImgSlicer(SurfaceMotionPlanner):
         visualize label image by combine'''
         first_n = min(first_n, self.num_envs)
 
-        if key=='seg':
+        if key=='seg' or key=='US':
 
-            combined_img = self.label_img_tensor[:first_n, :, :].reshape((first_n * self.img_size[0], self.img_size[1])) # (w * first_n, h)
+            combined_img = self.label_img_tensor[:first_n, :, :, 0].reshape((first_n * self.img_size[0], self.img_size[1])) # (w * first_n, h)
 
             combined_img_np = combined_img.cpu().numpy()
 
             cv2.imshow("Label Image Update", combined_img_np.T / np.max(combined_img_np))
             cv2.waitKey(1)
-        elif key=='CT':
+        if key=='CT' or key=='US':
 
-            combined_ct = self.ct_img_tensor[:first_n, :, :].reshape((first_n * self.img_size[0], self.img_size[1])) # (w * first_n, h)
+            combined_ct = self.ct_img_tensor[:first_n, :, :, 0].reshape((first_n * self.img_size[0], self.img_size[1])) # (w * first_n, h)
 
             combined_ct_np = combined_ct.cpu().numpy()
 
