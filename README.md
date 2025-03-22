@@ -162,8 +162,23 @@ Follow https://isaac-sim.github.io/IsaacLab/main/source/deployment/cluster.html,
 ```
 By default, it will export the image named ```isaac-lab-template```.
 
+### Copy data
+The data in ```source/spinal_surgery/spinal_surgery/assets/data``` can be huge. Instead of copying it with codes every time we submit the job, we can copy it to a path on cluster ```/cluster/path/to/dir/data``` only once through:
+```
+scp -r source/spinal_surgery/spinal_surgery/assets/data /cluster/path/to/dir/
+```
+
+Then by specifying in ```/docker/cluster_extension/.env.cluster```
+
+```
+CLUSTER_DATA_PATH=/cluster/path/to/dir/data
+```
+The script will automatically link ```/cluster/path/to/dir/data``` to the ```/workspace/isaac_extension_template/source/spinal_surgery/spinal_surgery/assets/data``` folder.
+
 ### Submitting a job
-Import your extension template in the file specified by ```CLUSTER_PYTHON_EXECUTABLE``` in ```.env.cluster```
+First import your extension template in the file specified by ```CLUSTER_PYTHON_EXECUTABLE``` in ```.env.cluster``` through ```import spinal_surgery```.
+
+Then you can submit the job through:
 ```
 ./docker/cluster/cluster_interface.sh job "argument1" "argument2" ...
 ```

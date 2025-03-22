@@ -88,7 +88,7 @@ submit_job() {
             ;;
     esac
 
-    ssh $CLUSTER_LOGIN "cd $CLUSTER_ISAACLAB_DIR && bash $CLUSTER_ISAACLAB_DIR/docker/cluster/$job_script_file \"$CLUSTER_ISAACLAB_DIR\" \"isaac-lab-$profile\" ${@}"
+    ssh $CLUSTER_LOGIN "cd $CLUSTER_ISAACLAB_DIR && bash $CLUSTER_ISAACLAB_DIR/docker/cluster_extension/$job_script_file \"$CLUSTER_ISAACLAB_DIR\" \"isaac-lab-$profile\" ${@}"
 }
 
 #==
@@ -198,6 +198,8 @@ case $command in
         # Sync Isaac Lab code
         echo "[INFO] Syncing Isaac Lab code..."
         rsync -rh  --exclude="*.git*" --filter=':- .dockerignore'  /$SCRIPT_DIR/../.. $CLUSTER_LOGIN:$CLUSTER_ISAACLAB_DIR
+        echo "[INFO] Syncing Isaac Lab extension template code..."
+        rsync -rh  --exclude="*.git*" --filter=':- .dockerignore'  /$SCRIPT_DIR/../$LOCAL_ISAACLAB_EXTENSION_DIR $CLUSTER_LOGIN:$CLUSTER_ISAACLAB_DIR/extension
         # execute job script
         echo "[INFO] Executing job script..."
         # check whether the second argument is a profile or a job argument

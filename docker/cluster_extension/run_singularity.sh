@@ -28,7 +28,7 @@ setup_directories() {
 #==
 # Main
 #==
-
+echo "(run_singularity.py extension): Start"
 
 # get script directory
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
@@ -67,6 +67,8 @@ singularity exec \
     -B $TMPDIR/docker-isaac-sim/data:${DOCKER_USER_HOME}/.local/share/ov/data:rw \
     -B $TMPDIR/docker-isaac-sim/documents:${DOCKER_USER_HOME}/Documents:rw \
     -B $TMPDIR/$dir_name:/workspace/isaaclab:rw \
+    -B $TMPDIR/$dir_name/extension/IsaacLabExtensionTemplate:/workspace/isaaclab_extension_template:rw \
+    -B $CLUSTER_DATA_PATH:/workspace/isaaclab_extension_template/source/spinal_surgery/spinal_surgery/assets/data:rw \
     -B $CLUSTER_ISAACLAB_DIR/logs:/workspace/isaaclab/logs:rw \
     --nv --writable --containall $TMPDIR/$2.sif \
     bash -c "export ISAACLAB_PATH=/workspace/isaaclab && cd /workspace/isaaclab && /isaac-sim/python.sh ${CLUSTER_PYTHON_EXECUTABLE} ${@:3}"
