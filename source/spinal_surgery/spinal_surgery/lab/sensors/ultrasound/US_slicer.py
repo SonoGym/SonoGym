@@ -211,12 +211,11 @@ class USSlicer(LabelImgSlicer):
         if key=='US':
             first_n = min(first_n, self.num_envs)
 
-            combined_US_img = self.us_img_tensor[:first_n, :, 0, :].permute(0, 2, 1).reshape((-1, self.img_size[1])) # (w * first_n, h)
+            combined_US_img = self.us_img_tensor[:first_n, :, :, 0].permute(0, 2, 1).reshape((-1, self.img_size[1])) # (w * first_n, h)
 
             combined_img_np = combined_US_img.cpu().numpy()
 
             cv2.imshow("US Image Update", combined_img_np.T / 20)
             cv2.waitKey(1)
-        else:
-            raise ValueError(f"Invalid visualization key {key}.")
+        
 

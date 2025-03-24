@@ -18,8 +18,8 @@ motion_planning:
   scale: [[5, 5, 0.1]]
 
 observation: 
-  3D: True
-  mode: 'US' # 'seg', 'CT', 'US'
+  3D: False
+  mode: 'CT' # 'seg', 'CT', 'US'
   scale: 0.1 # 0.1, 0.0005, 0.003
 action: 
   mode: 'continuous' # 'discrete', 'continuous'
@@ -28,8 +28,8 @@ action:
 
 sim:
   episode_length: 500
-  patient_xz_range: [[100, 100, 1.5], [170, 200, 3.14]]
-  patient_xz_init_range: [[120, 120, 1.5], [180, 180, 3.5]]
+  patient_xz_range: [[100, 70, 1.5], [180, 200, 3.5]]
+  patient_xz_init_range: [[100, 70, 1.5], [180, 200, 3.5]]
   if_use_ct: True
   ct_range: [-300, 3000]
   vis_us: True

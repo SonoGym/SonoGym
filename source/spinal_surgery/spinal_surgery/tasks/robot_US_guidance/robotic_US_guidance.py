@@ -93,7 +93,7 @@ scale = 1/label_res
 class roboticUSEnvCfg(DirectRLEnvCfg):
     # env
     decimation = 2
-    episode_length_s = 10
+    episode_length_s = 5 # 300
     action_scale = 1 
     action_space = 3
     observation_space = [1, 150, 200]
@@ -195,6 +195,8 @@ class roboticUSEnv(DirectRLEnv):
             dtype=np.uint8,
         )
 
+        self.cfg.observation_space[0] = self.US_slicer.img_thickness
+
         self.single_observation_space['policy'] = gym.spaces.Box(
             low=0,
             high=255,
@@ -291,15 +293,15 @@ class roboticUSEnv(DirectRLEnv):
         
         if self.observation_mode == "US":
             self.US_slicer.slice_US(self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7])
-            US_img = self.US_slicer.us_img_tensor.unsqueeze(1) * self.cfg.observation_scale
+            US_img = self.US_slicer.us_img_tensor.permute(0, 3, 1, 2) * self.cfg.observation_scale
             observations = {"policy": US_img.to(torch.uint8)}
         elif self.observation_mode == "CT":
             self.US_slicer.slice_label_img(self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7])
-            CT_img = self.US_slicer.ct_img_tensor.unsqueeze(1) * self.cfg.observation_scale
+            CT_img = self.US_slicer.ct_img_tensor.permute(0, 3, 1, 2) * self.cfg.observation_scale
             observations = {"policy": CT_img.to(torch.uint8)}
         elif self.observation_mode == "seg":
             self.US_slicer.slice_label_img(self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7])
-            label_img = self.US_slicer.label_img_tensor.unsqueeze(1) * self.cfg.observation_scale
+            label_img = self.US_slicer.label_img_tensor.permute(0, 3, 1, 2) * self.cfg.observation_scale
             observations = {"policy": label_img.to(torch.uint8)}
         else:
             raise ValueError("Invalid observation mode")
