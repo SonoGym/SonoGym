@@ -16,11 +16,11 @@ from . import agents
 ##
 
 gym.register(
-    id="Isaac-robot-surgery-v0",
-    entry_point=f"{__name__}.robotic_US_guidance_surgery:roboticSurgeryEnv",
+    id="Isaac-robot-US-goal-guidance-v0",
+    entry_point=f"{__name__}.robotic_US_goal_guidance:roboticUSGoalEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": f"{__name__}.robotic_US_guidance:roboticSurgeryEnvCfg",
+        "env_cfg_entry_point": f"{__name__}.robotic_US_goal_guidance:roboticUSGoalEnvCfg",
         "rl_games_cfg_entry_point": f"{agents.__name__}:rl_games_ppo_cfg.yaml",
         "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg.yaml",
         "sb3_cfg_entry_point": f"{agents.__name__}:sb3_ppo_cfg.yaml",

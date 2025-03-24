@@ -23,8 +23,7 @@ import gymnasium as gym
 # Pre-defined configs
 ##
 from spinal_surgery.assets.kuka_US import *
-from spinal_surgery.assets.kuka_drill import *
-from isaaclab.utils.math import subtract_frame_transforms, combine_frame_transforms
+from isaaclab.utils.math import subtract_frame_transforms, combine_frame_transforms, matrix_from_quat, quat_from_matrix
 from pxr import Gf, UsdGeom
 from scipy.spatial.transform import Rotation as R
 from spinal_surgery.lab.kinematics.human_frame_viewer import HumanFrameViewer
@@ -34,8 +33,11 @@ from spinal_surgery.lab.sensors.ultrasound.US_slicer import USSlicer
 from ruamel.yaml import YAML
 from spinal_surgery import PACKAGE_DIR
 from spinal_surgery.lab.kinematics.gt_motion_generator import GTMotionGenerator, GTDiscreteMotionGenerator
+import cProfile
+import copy
+import cv2
 
-scene_cfg = YAML().load(open(f"{PACKAGE_DIR}/tasks/robot_US_guidance/cfgs/robotic_US_guidance.yaml", 'r'))
+scene_cfg = YAML().load(open(f"{PACKAGE_DIR}/tasks/robot_US_goal_guidance/cfgs/robotic_US_goal_guidance.yaml", 'r'))
 
 # robot
 robot_cfg = scene_cfg['robot']
@@ -50,21 +52,6 @@ INIT_STATE_ROBOT_US = ArticulationCfg.InitialStateCfg(
         "lbr_joint_6": robot_cfg['joint_pos'][6],
     },
     pos = (float(robot_cfg['pos'][0]), float(robot_cfg['pos'][1]), float(robot_cfg['pos'][2])) # ((0.0, -0.75, 0.4))
-)
-robot_drill_cfg = scene_cfg['robot']
-quat = R.from_euler("yxz", robot_drill_cfg['euler_yxz'], degrees=True).as_quat()
-INIT_STATE_ROBOT_DRILL = ArticulationCfg.InitialStateCfg(
-    joint_pos={
-        "lbr_joint_0": robot_drill_cfg['joint_pos'][0],
-        "lbr_joint_1": robot_drill_cfg['joint_pos'][1],
-        "lbr_joint_2": robot_drill_cfg['joint_pos'][2],
-        "lbr_joint_3": robot_drill_cfg['joint_pos'][3], # -1.2,
-        "lbr_joint_4": robot_drill_cfg['joint_pos'][4],
-        "lbr_joint_5": robot_drill_cfg['joint_pos'][5], # 1.5,
-        "lbr_joint_6": robot_drill_cfg['joint_pos'][6],
-    },
-    pos = (float(robot_drill_cfg['pos'][0]), float(robot_drill_cfg['pos'][1]), float(robot_drill_cfg['pos'][2])), # ((0.0, -0.75, 0.4))
-    rot=(float(quat[3]), float(quat[0]), float(quat[1]), float(quat[2]))
 )
 
 # patient
@@ -105,15 +92,15 @@ scale = 1/label_res
 
 
 @configclass
-class roboticSurgeryEnvCfg(DirectRLEnvCfg):
+class roboticUSGoalEnvCfg(DirectRLEnvCfg):
     # env
     decimation = 2
-    episode_length_s = 10
+    episode_length_s = 5 # 300
     action_scale = 1 
     action_space = 3
-    observation_space = [1, 200, 150]
+    observation_space = [1, 150, 200]
     state_space = 0
-    observation_scale = 8
+    observation_scale = scene_cfg['observation']['scale']
 
     # simulation
     sim: sim_utils.SimulationCfg = sim_utils.SimulationCfg(dt=1 / 120, render_interval=decimation)
@@ -122,19 +109,15 @@ class roboticSurgeryEnvCfg(DirectRLEnvCfg):
         prim_path="/World/envs/env_.*/Robot_US",
         init_state=INIT_STATE_ROBOT_US
     )
-    robot_drill_cfg: ArticulationCfg = KUKA_HIGH_PD_DRILL_CFG.replace(
-        prim_path="/World/envs/env_.*/Robot_drill",
-        init_state=INIT_STATE_ROBOT_DRILL
-    )
 
     # scene
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=100, env_spacing=4.0, replicate_physics=False)
 
 
-class roboticSurgeryEnv(DirectRLEnv):
-    cfg: roboticSurgeryEnvCfg
+class roboticUSGoalEnv(DirectRLEnv):
+    cfg: roboticUSGoalEnvCfg
 
-    def __init__(self, cfg: roboticSurgeryEnvCfg, render_mode: str | None = None, **kwargs):
+    def __init__(self, cfg: roboticUSGoalEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
         self.robot_entity_cfg = SceneEntityCfg("robot_US", joint_names=["lbr_joint_.*"], body_names=["lbr_link_ee"])
@@ -168,6 +151,10 @@ class roboticSurgeryEnv(DirectRLEnv):
         self.sim_cfg = scene_cfg['sim']
         self.init_cmd_pose_min = torch.tensor(self.sim_cfg['patient_xz_init_range'][0], device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
         self.init_cmd_pose_max = torch.tensor(self.sim_cfg['patient_xz_init_range'][1], device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
+        if scene_cfg['observation']['3D']:
+            img_thickness = us_cfg['image_3D_thickness']
+        else:
+            img_thickness = 1
         self.US_slicer = USSlicer(
             us_cfg,
             label_map_list, 
@@ -181,6 +168,7 @@ class roboticSurgeryEnv(DirectRLEnv):
             label_convert_map,
             us_cfg['image_size'], 
             us_cfg['resolution'],
+            img_thickness=img_thickness,
             visualize=self.sim_cfg['vis_seg_map'],
         )
         self.US_slicer.current_x_z_x_angle_cmd = (self.init_cmd_pose_min + self.init_cmd_pose_max) / 2
@@ -188,18 +176,10 @@ class roboticSurgeryEnv(DirectRLEnv):
         self.human_world_poses = self.human.data.root_state_w # these are already the initial poses
 
         # construct ground truth motion generator
-        motion_plan_cfg = scene_cfg['motion_planning']
-        self.max_action = torch.tensor(self.sim_cfg['max_action'], device=self.sim.device).reshape((1, -1))
-        self.goal_cmd_pose = torch.tensor(motion_plan_cfg['patient_xz_goal'], device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
-        self.gt_motion_generator = GTDiscreteMotionGenerator(
-            goal_cmd_pose=self.goal_cmd_pose,
-            scale=torch.tensor(motion_plan_cfg['scale'], device=self.sim.device),
-            num_envs=self.scene.num_envs,
-            surface_map_list=self.US_slicer.surface_map_list,
-            surface_normal_list=self.US_slicer.surface_normal_list,
-            label_res=label_res,
-            US_height=self.US_slicer.height,
-        )
+        self.motion_plan_cfg = scene_cfg['motion_planning']
+        self.goal_cmd_pose_min = torch.tensor(self.motion_plan_cfg['patient_xz_goal_range'][0], device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
+        self.goal_cmd_pose_max = torch.tensor(self.motion_plan_cfg['patient_xz_goal_range'][1], device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
+        self.max_action = torch.tensor(scene_cfg['action']['max_action'], device=self.sim.device).reshape((1, -1))
         
         # change observation space to image 
         self.observation_space = gym.spaces.Box(
@@ -209,12 +189,23 @@ class roboticSurgeryEnv(DirectRLEnv):
             dtype=np.uint8,
         )
 
+        self.cfg.observation_space[0] = self.US_slicer.img_thickness
+
         self.single_observation_space['policy'] = gym.spaces.Box(
             low=0,
             high=255,
-            shape=(self.cfg.observation_space[0], self.cfg.observation_space[1], self.cfg.observation_space[2]),
+            shape=(self.cfg.observation_space[0]*2, self.cfg.observation_space[1], self.cfg.observation_space[2]),
             dtype=np.uint8,
         )
+
+        self.termination_direct = True
+
+        self.observation_mode = scene_cfg['observation']['mode']
+        self.goal_observation_mode = scene_cfg['goal_observation']['mode']
+        self.goal_observation_scale = scene_cfg['goal_observation']['scale']
+
+        self.action_mode = scene_cfg['action']['mode']
+        self.action_scale = torch.tensor(scene_cfg['action']['scale'], device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
 
 
     def _setup_scene(self):
@@ -231,7 +222,6 @@ class roboticSurgeryEnv(DirectRLEnv):
         # articulation
         # kuka US
         self.robot = Articulation(self.cfg.robot_cfg)
-        self.robot_drill = Articulation(self.cfg.robot_drill_cfg)
 
         # medical bad
         medical_bed_cfg = RigidObjectCfg(
@@ -298,12 +288,25 @@ class roboticSurgeryEnv(DirectRLEnv):
         # get ee pose w
         self.US_ee_pose_w = self.robot.data.body_state_w[:, self.robot_entity_cfg.body_ids[-1], 0:7]
 
-        self.US_slicer.slice_US(self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7])
-        US_img = self.US_slicer.us_img_tensor.unsqueeze(1) * self.cfg.observation_scale
-        observations = {"policy": US_img.to(torch.uint8)}
-
+        
+        if self.observation_mode == "US":
+            self.US_slicer.slice_US(self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7])
+            obs_img = self.US_slicer.us_img_tensor.permute(0, 3, 1, 2) * self.cfg.observation_scale
+        elif self.observation_mode == "CT":
+            self.US_slicer.slice_label_img(self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7])
+            obs_img = self.US_slicer.ct_img_tensor.permute(0, 3, 1, 2) * self.cfg.observation_scale
+            
+        elif self.observation_mode == "seg":
+            self.US_slicer.slice_label_img(self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7])
+            obs_img = self.US_slicer.label_img_tensor.permute(0, 3, 1, 2) * self.cfg.observation_scale
+        else:
+            raise ValueError("Invalid observation mode")
+        
         if self.sim_cfg['vis_us']:
-            self.US_slicer.visualize()
+            self.visualize_obs(obs_img, self.goal_obs_images)
+        
+        obs_img = torch.cat([obs_img, self.goal_obs_images], dim=1)
+        observations = {"policy": obs_img.to(torch.uint8)}
 
         return observations
 
@@ -315,9 +318,20 @@ class roboticSurgeryEnv(DirectRLEnv):
         # update the target command
         # actions = torch.zeros_like(actions).to(self.sim.device)
         # actions[:, 0] = 1
-        actions = torch.clamp(actions, -self.max_action, self.max_action)
-        # clip the action
-        self.US_slicer.update_cmd(actions)
+        if self.action_mode=='continuous':
+            actions = torch.clamp(actions * self.action_scale, -self.max_action, self.max_action)
+        elif self.action_mode=='discrete':
+            actions = torch.sign(actions) * self.action_scale
+        else:
+            raise ValueError("Invalid action mode")
+        # actions: dx, dz: in image frame
+        human_to_ee_pos, human_to_ee_quat = subtract_frame_transforms(
+            self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
+        )
+        human_to_ee_rot_mat = matrix_from_quat(human_to_ee_quat)
+        dx_dz_human = actions[:, 0].unsqueeze(1) * human_to_ee_rot_mat[:, :, 0] + actions[:, 1].unsqueeze(1) * human_to_ee_rot_mat[:, :, 1]
+        cmd = torch.cat([dx_dz_human[:, [0, 2]], actions[:, 2:3]], dim=-1)
+        self.US_slicer.update_cmd(cmd)
 
         # compute desired world to ee pose
         world_to_ee_target_pos, world_to_ee_target_rot = self.US_slicer.compute_world_ee_pose_from_cmd(
@@ -360,26 +374,34 @@ class roboticSurgeryEnv(DirectRLEnv):
             self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
         )
         cur_cmd_pose = self.gt_motion_generator.human_cmd_state_from_ee_pose(cur_human_ee_pos, cur_human_ee_quat)
-        gt_cmd, gt_cmd_pose = self.gt_motion_generator.generate_gt_human_cmd(cur_cmd_pose)
+        # gt_cmd, gt_cmd_pose = self.gt_motion_generator.generate_gt_human_cmd(cur_cmd_pose)
 
         # add reward for getting closer to the target
-        cur_distance_to_goal = torch.norm(cur_cmd_pose - self.goal_cmd_pose, dim=-1)
+        cur_distance_to_goal = torch.norm(cur_cmd_pose[:, 0:2] - self.goal_cmd_poses[:, 0:2], dim=-1) * 0.001
+        cur_distance_to_goal += torch.norm(cur_cmd_pose[:, 2:3] - self.goal_cmd_poses[:, 2:3], dim=-1)
 
         reward = self.distance_to_goal - cur_distance_to_goal
 
         self.distance_to_goal = cur_distance_to_goal
 
-        reward -= 0.01 * torch.norm(self.actions, dim=-1)
+        reward -= 0.001 * cur_distance_to_goal # faster to reach the goal
+
+        self.total_reward += reward
+        # print(self.total_reward)
 
         return reward 
     
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
-        time_out = self.episode_length_buf >= self.max_episode_length - 1
+        if self.termination_direct:
+            time_out = self.episode_length_buf >= self.max_episode_length - 1
+        else:
+            time_out = torch.zeros_like(self.episode_length_buf)
         out_of_bounds = torch.zeros_like(self.US_slicer.no_collide) # self.US_slicer.no_collide
+       
         return out_of_bounds, time_out
     
     def _move_towards_target(self, 
-                             world_ee_target_pos: torch.Tensor, world_ee_target_quat: torch.Tensor,
+                             human_ee_target_pos: torch.Tensor, human_ee_target_quat: torch.Tensor,
                              num_steps: int = 100):
         is_rendering = self.sim.has_gui() or self.sim.has_rtx_sensors()
 
@@ -391,13 +413,16 @@ class roboticSurgeryEnv(DirectRLEnv):
             self.human_world_poses = self.human.data.body_link_state_w[:, 0, 0:7] # these are already the initial poses
             # define world to human poses
             self.world_to_human_pos, self.world_to_human_rot = self.human_world_poses[:, 0:3], self.human_world_poses[:, 3:7]
+            world_ee_target_pos, world_ee_target_quat = combine_frame_transforms(
+                self.world_to_human_pos, self.world_to_human_rot, human_ee_target_pos, human_ee_target_quat
+            )
 
             # get current joint positions
-            US_ee_pose_w = self.robot.data.body_state_w[:, self.robot_entity_cfg.body_ids[-1], 0:7]
+            self.US_ee_pose_w = self.robot.data.body_state_w[:, self.robot_entity_cfg.body_ids[-1], 0:7]
 
             # get current ee
             US_ee_pos_b, US_ee_quat_b = subtract_frame_transforms(
-                self.world_to_base_pose[:, 0:3], self.world_to_base_pose[:, 3:7], US_ee_pose_w[:, 0:3], US_ee_pose_w[:, 3:7]
+                self.world_to_base_pose[:, 0:3], self.world_to_base_pose[:, 3:7], self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
             )
             base_to_ee_target_pos, base_to_ee_target_quat = subtract_frame_transforms(
                self. world_to_base_pose[:, 0:3],self. world_to_base_pose[:, 3:7], world_ee_target_pos, world_ee_target_quat
@@ -465,17 +490,49 @@ class roboticSurgeryEnv(DirectRLEnv):
         self.world_to_human_pos, self.world_to_human_rot = self.human_world_poses[:, 0:3], self.human_world_poses[:, 3:7]
         self.world_to_base_pose = self.robot.data.root_link_state_w[:, 0:7]
 
+        # init 2d goal poses
+        cmd_goal_poses = torch.rand((self.scene.num_envs, 3), device=self.sim.device)
+        min_goal = self.goal_cmd_pose_min
+        max_goal = self.goal_cmd_pose_max
+        self.goal_cmd_poses = cmd_goal_poses * (max_goal - min_goal) + min_goal
+        self.gt_motion_generator = GTDiscreteMotionGenerator(
+            goal_cmd_pose=self.goal_cmd_poses,
+            scale=torch.tensor(self.motion_plan_cfg['scale'], device=self.sim.device),
+            num_envs=self.scene.num_envs,
+            surface_map_list=self.US_slicer.surface_map_list,
+            surface_normal_list=self.US_slicer.surface_normal_list,
+            label_res=label_res,
+            US_height=self.US_slicer.height,
+        )
+
+        # get images at goal poses
+        self.US_slicer.current_x_z_x_angle_cmd = self.goal_cmd_poses
+        self.goal_world_to_ee_pos, self.goal_world_to_ee_quat = self.US_slicer.compute_world_ee_pose_from_cmd(
+            self.world_to_human_pos, self.world_to_human_rot)
+        self.US_slicer.slice_US(self.world_to_human_pos, self.world_to_human_rot, 
+                                self.goal_world_to_ee_pos, self.goal_world_to_ee_quat)
+        if self.goal_observation_mode == "US":
+            self.goal_obs_images = copy.deepcopy(self.US_slicer.us_img_tensor).permute(0, 3, 1, 2) * self.goal_observation_scale
+        elif self.goal_observation_mode == "CT":
+            self.goal_obs_images = copy.deepcopy(self.US_slicer.ct_img_tensor).permute(0, 3, 1, 2) * self.goal_observation_scale
+        elif self.goal_observation_mode == "seg":
+            self.goal_obs_images = copy.deepcopy(self.US_slicer.label_img_tensor).permute(0, 3, 1, 2) * self.goal_observation_scale
+        else:
+            raise ValueError("Invalid goal observation mode")
+        
         # compute 2d target poses
         cmd_target_poses = torch.rand((self.scene.num_envs, 3), device=self.sim.device)
         min_init = self.init_cmd_pose_min
         max_init = self.init_cmd_pose_max
         cmd_target_poses = cmd_target_poses * (max_init - min_init) + min_init
+
         # compute 3d target poses
         self.US_slicer.update_cmd(cmd_target_poses - self.US_slicer.current_x_z_x_angle_cmd)
-        world_to_ee_init_pos, world_to_ee_init_rot = self.US_slicer.compute_world_ee_pose_from_cmd(self.world_to_human_pos, self.world_to_human_rot)
+        world_to_ee_init_pos, world_to_ee_init_rot = self.US_slicer.compute_world_ee_pose_from_cmd(
+            self.world_to_human_pos, self.world_to_human_rot)
         # compute joint positions
         # set joint positions
-        self._move_towards_target(world_to_ee_init_pos, world_to_ee_init_rot)
+        self._move_towards_target(self.US_slicer.human_to_ee_target_pos, self.US_slicer.human_to_ee_target_quat)
 
         # init distance to goal
         cur_human_ee_pos, cur_human_ee_quat = subtract_frame_transforms(
@@ -483,9 +540,35 @@ class roboticSurgeryEnv(DirectRLEnv):
             self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
         )
         self.cur_cmd_pose = self.gt_motion_generator.human_cmd_state_from_ee_pose(cur_human_ee_pos, cur_human_ee_quat)
-        self.distance_to_goal = torch.norm(self.cur_cmd_pose - self.goal_cmd_pose, dim=-1)
+        self.distance_to_goal = torch.norm(self.cur_cmd_pose[:, 0:2] - self.goal_cmd_poses[:, 0:2], dim=-1) * 0.001
+        self.distance_to_goal += torch.norm(self.cur_cmd_pose[:, 2:3] - self.goal_cmd_poses[:, 2:3], dim=-1)
+
+        self.total_reward = torch.zeros(self.scene.num_envs, device=self.sim.device)
 
 
+    def visualize_obs(self, obs, goal_obs, first_n=10):
+        '''
+        visualize both obs and goal obs
+        obs: (N, C, H, W)
+        goal_obs: (N, C, H, W)
+        first_n: first n images to visualize
+        '''
+        # convert to numpy
+        first_n = min(first_n, self.scene.num_envs)
+
+        combined_obs_img = obs[:first_n, 0, :, :].reshape((-1, self.US_slicer.img_size[1])) # (w * first_n, h)
+
+        combined_obs_np = combined_obs_img.cpu().numpy()
+
+        cv2.imshow("obs Image Update", combined_obs_np.T / 20)
+        cv2.waitKey(1)
+
+        combined_goal_obs_img = goal_obs[:first_n, 0, :, :].reshape((-1, self.US_slicer.img_size[1])) # (w * first_n, h)
+
+        combined_goal_obs_np = combined_goal_obs_img.cpu().numpy()
+
+        cv2.imshow("goal obs Image Update", combined_goal_obs_np.T / 20)
+        cv2.waitKey(1)
 
 
 

@@ -18,7 +18,7 @@ parser.add_argument(
 )
 parser.add_argument("--num_envs", type=int, default=2, help="Number of environments to simulate.")
 parser.add_argument("--teleop_device", type=str, default="keyboard", help="Device for interacting with environment")
-parser.add_argument("--task", type=str, default='Isaac-robot-US-guidance-v0', help="Name of the task.")
+parser.add_argument("--task", type=str, default='Isaac-robot-US-goal-guidance-v0', help="Name of the task.")
 parser.add_argument("--sensitivity", type=float, default=5.0, help="Sensitivity factor.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -111,7 +111,7 @@ def main():
 
     # simulate environment
     step = 0
-    while simulation_app.is_running() and step < 1000:
+    while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():
             step +=1 
