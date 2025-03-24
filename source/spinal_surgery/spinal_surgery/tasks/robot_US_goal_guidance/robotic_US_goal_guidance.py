@@ -207,6 +207,9 @@ class roboticUSGoalEnv(DirectRLEnv):
         self.action_mode = scene_cfg['action']['mode']
         self.action_scale = torch.tensor(scene_cfg['action']['scale'], device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
 
+        # if demo with expert
+        self.expert_demo = scene_cfg['sim']['expert_demo']
+
 
     def _setup_scene(self):
         """Configuration for a cart-pole scene."""
@@ -287,7 +290,6 @@ class roboticUSGoalEnv(DirectRLEnv):
         self.world_to_human_pos, self.world_to_human_rot = self.human_world_poses[:, 0:3], self.human_world_poses[:, 3:7]
         # get ee pose w
         self.US_ee_pose_w = self.robot.data.body_state_w[:, self.robot_entity_cfg.body_ids[-1], 0:7]
-
         
         if self.observation_mode == "US":
             self.US_slicer.slice_US(self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7])
@@ -306,17 +308,40 @@ class roboticUSGoalEnv(DirectRLEnv):
             self.visualize_obs(obs_img, self.goal_obs_images)
         
         obs_img = torch.cat([obs_img, self.goal_obs_images], dim=1)
-        observations = {"policy": obs_img.to(torch.uint8)}
+
+        # get pose ground truth
+        cur_human_ee_pos, cur_human_ee_quat = subtract_frame_transforms(
+            self.world_to_human_pos, self.world_to_human_rot, 
+            self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
+        )
+        cur_cmd_pose = self.gt_motion_generator.human_cmd_state_from_ee_pose(cur_human_ee_pos, cur_human_ee_quat)
+        gt_cmd, gt_cmd_pose = self.gt_motion_generator.generate_gt_2d_cmd_in_ee(cur_cmd_pose, cur_human_ee_pos, cur_human_ee_quat)
+
+        print('cmd', cur_cmd_pose)
+        print('goal', self.goal_cmd_poses)
+
+
+        observations = {"policy": obs_img.to(torch.uint8), 'expert_action': gt_cmd}
 
         return observations
 
         
     def _pre_physics_step(self, actions: torch.Tensor) -> None:
-        # if action is 6 dim (SE), convert to 3 dim (xz pos + y rot)
-        if actions.shape[-1] == 6:
-            actions = actions[:, [0, 2, 5]]
-        # update the target command
-        # actions = torch.zeros_like(actions).to(self.sim.device)
+        
+        if self.expert_demo:
+            cur_human_ee_pos, cur_human_ee_quat = subtract_frame_transforms(
+                self.world_to_human_pos, self.world_to_human_rot, 
+                self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
+            )
+            cur_cmd_pose = self.gt_motion_generator.human_cmd_state_from_ee_pose(cur_human_ee_pos, cur_human_ee_quat)
+            gt_cmd = self.gt_motion_generator.generate_gt_2d_cmd_in_ee(cur_cmd_pose, cur_human_ee_pos, cur_human_ee_quat)
+            actions = gt_cmd
+        else:
+            # if action is 6 dim (SE), convert to 3 dim (xz pos + y rot)
+            if actions.shape[-1] == 6:
+                actions = actions[:, [0, 2, 5]]
+            # update the target command
+            # actions = torch.zeros_like(actions).to(self.sim.device)
         # actions[:, 0] = 1
         if self.action_mode=='continuous':
             actions = torch.clamp(actions * self.action_scale, -self.max_action, self.max_action)
@@ -324,6 +349,8 @@ class roboticUSGoalEnv(DirectRLEnv):
             actions = torch.sign(actions) * self.action_scale
         else:
             raise ValueError("Invalid action mode")
+
+        ## 
         # actions: dx, dz: in image frame
         human_to_ee_pos, human_to_ee_quat = subtract_frame_transforms(
             self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
@@ -375,7 +402,7 @@ class roboticUSGoalEnv(DirectRLEnv):
         )
         cur_cmd_pose = self.gt_motion_generator.human_cmd_state_from_ee_pose(cur_human_ee_pos, cur_human_ee_quat)
         # gt_cmd, gt_cmd_pose = self.gt_motion_generator.generate_gt_human_cmd(cur_cmd_pose)
-
+        
         # add reward for getting closer to the target
         cur_distance_to_goal = torch.norm(cur_cmd_pose[:, 0:2] - self.goal_cmd_poses[:, 0:2], dim=-1) * 0.001
         cur_distance_to_goal += torch.norm(cur_cmd_pose[:, 2:3] - self.goal_cmd_poses[:, 2:3], dim=-1)
@@ -506,7 +533,7 @@ class roboticUSGoalEnv(DirectRLEnv):
         )
 
         # get images at goal poses
-        self.US_slicer.current_x_z_x_angle_cmd = self.goal_cmd_poses
+        self.US_slicer.current_x_z_x_angle_cmd = copy.deepcopy(self.goal_cmd_poses)
         self.goal_world_to_ee_pos, self.goal_world_to_ee_quat = self.US_slicer.compute_world_ee_pose_from_cmd(
             self.world_to_human_pos, self.world_to_human_rot)
         self.US_slicer.slice_US(self.world_to_human_pos, self.world_to_human_rot, 

@@ -376,6 +376,7 @@ class roboticUSEnv(DirectRLEnv):
         )
         cur_cmd_pose = self.gt_motion_generator.human_cmd_state_from_ee_pose(cur_human_ee_pos, cur_human_ee_quat)
         # gt_cmd, gt_cmd_pose = self.gt_motion_generator.generate_gt_human_cmd(cur_cmd_pose)
+        # print(cur_cmd_pose)
 
         # add reward for getting closer to the target
         cur_distance_to_goal = torch.norm(cur_cmd_pose[:, 0:2] - self.goal_cmd_pose[:, 0:2], dim=-1) * 0.001

@@ -15,6 +15,7 @@ RUN ${ISAACLAB_PATH}/isaaclab.sh -p -m pip install pyvista
 RUN ${ISAACLAB_PATH}/isaaclab.sh -p -m pip install ruamel.yaml
 RUN ${ISAACLAB_PATH}/isaaclab.sh -p -m pip install pydicom
 RUN ${ISAACLAB_PATH}/isaaclab.sh -p -m pip install nibabel
+RUN ${ISAACLAB_PATH}/isaaclab.sh -p -m pip install imitation
 
 # # Install whatever you need as additional dependencies.
 RUN bash -i -c "source ${HOME}/.bashrc && \
