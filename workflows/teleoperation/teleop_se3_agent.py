@@ -18,7 +18,7 @@ parser.add_argument(
 )
 parser.add_argument("--num_envs", type=int, default=2, help="Number of environments to simulate.")
 parser.add_argument("--teleop_device", type=str, default="keyboard", help="Device for interacting with environment")
-parser.add_argument("--task", type=str, default='Isaac-robot-US-goal-guidance-v0', help="Name of the task.")
+parser.add_argument("--task", type=str, default='Isaac-robot-US-guided-surgery-v0', help="Name of the task.")
 parser.add_argument("--sensitivity", type=float, default=5.0, help="Sensitivity factor.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -49,7 +49,7 @@ import cProfile
 def pre_process_actions(delta_pose: torch.Tensor, gripper_command: bool) -> torch.Tensor:
     """Pre-process actions for the environment."""
     # compute actions based on environment
-    if "Reach" in args_cli.task or 'guidance' in args_cli.task:
+    if "Reach" in args_cli.task or 'guidance' in args_cli.task or 'surgery' in args_cli.task:
         # note: reach is the only one that uses a different action space
         # compute actions
         return delta_pose

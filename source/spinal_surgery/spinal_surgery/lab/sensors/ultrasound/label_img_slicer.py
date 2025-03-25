@@ -12,7 +12,7 @@ class LabelImgSlicer(SurfaceMotionPlanner):
     # Function: slice_label_img
     # Function: update_plotter
     def __init__(self, label_maps, ct_maps, human_list, num_envs, x_z_range, init_x_z_x_angle, device, label_convert_map,
-                 img_size, img_res, img_thickness=1, label_res=0.0015, max_distance=0.015, # [m]
+                 img_size, img_res, img_thickness=1, roll_adj=0.0, label_res=0.0015, max_distance=0.015, # [m]
                  body_label=120, height = 0.1, height_img = 0.1,
                  visualize=True, plane_axes={'h': [0, 0, 1], 'w': [1, 0, 0]}):
         '''
@@ -32,7 +32,8 @@ class LabelImgSlicer(SurfaceMotionPlanner):
         height_img: height of the us image frame
         visualize: whether to visualize the human frame
         ''' 
-        super().__init__(label_maps, human_list, num_envs, x_z_range, init_x_z_x_angle, device, label_res, body_label, height, height_img, visualize, plane_axes)
+        super().__init__(label_maps, human_list, num_envs, x_z_range, init_x_z_x_angle, device, roll_adj, 
+                         label_res, body_label, height, height_img, visualize, plane_axes)
         self.img_size = img_size
         self.img_res = img_res
         self.img_thickness = img_thickness

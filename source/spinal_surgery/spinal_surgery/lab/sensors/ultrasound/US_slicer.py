@@ -10,8 +10,9 @@ class USSlicer(LabelImgSlicer):
     # Function: __init__
     # Function: slice_US
     # Function: update_plotter
-    def __init__(self, us_cfg, label_maps, ct_maps, if_use_ct, human_list, num_envs, x_z_range, init_x_z_x_angle, device, label_convert_map,
-                 img_size, img_res, img_thickness=1, label_res=0.0015, max_distance=0.03, # [m]
+    def __init__(self, us_cfg, label_maps, ct_maps, if_use_ct, human_list, num_envs, x_z_range, init_x_z_x_angle, 
+                 device, label_convert_map,
+                 img_size, img_res, img_thickness=1, roll_adj=0.0, label_res=0.0015, max_distance=0.03, # [m]
                  body_label=120, height = 0.13, height_img = 0.133,
                  visualize=True, plane_axes={'h': [0, 0, 1], 'w': [1, 0, 0]}):
         '''
@@ -31,7 +32,7 @@ class USSlicer(LabelImgSlicer):
         visualize: whether to visualize the human frame
         '''
         super().__init__(label_maps, ct_maps, human_list, num_envs, x_z_range, init_x_z_x_angle, device, label_convert_map,
-                 img_size, img_res, img_thickness, label_res, max_distance,
+                 img_size, img_res, img_thickness, roll_adj, label_res, max_distance,
                  body_label, height, height_img,
                  visualize, plane_axes)
         self.us_sim = USSimulatorConv(us_cfg, device=device)
