@@ -315,10 +315,10 @@ class roboticUSGoalEnv(DirectRLEnv):
             self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
         )
         cur_cmd_pose = self.gt_motion_generator.human_cmd_state_from_ee_pose(cur_human_ee_pos, cur_human_ee_quat)
-        gt_cmd, gt_cmd_pose = self.gt_motion_generator.generate_gt_2d_cmd_in_ee(cur_cmd_pose, cur_human_ee_pos, cur_human_ee_quat)
+        gt_cmd = self.gt_motion_generator.generate_gt_2d_cmd_in_ee(cur_cmd_pose, cur_human_ee_pos, cur_human_ee_quat)
 
-        print('cmd', cur_cmd_pose)
-        print('goal', self.goal_cmd_poses)
+        # print('cmd', cur_cmd_pose)
+        # print('goal', self.goal_cmd_poses)
 
 
         observations = {"policy": obs_img.to(torch.uint8), 'expert_action': gt_cmd}
@@ -414,7 +414,7 @@ class roboticUSGoalEnv(DirectRLEnv):
         reward -= 0.001 * cur_distance_to_goal # faster to reach the goal
 
         self.total_reward += reward
-        # print(self.total_reward)
+        print(self.total_reward)
 
         return reward 
     

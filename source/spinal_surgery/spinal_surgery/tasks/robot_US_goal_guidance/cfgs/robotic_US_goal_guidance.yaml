@@ -15,7 +15,7 @@ bed:
 
 motion_planning:
   patient_xz_goal_range: [[100, 70, 1.5], [180, 200, 3.5]]
-  scale: [[1, 1, 0.05]]
+  scale: [[2, 2, 0.1]]
 
 observation: 
   3D: False

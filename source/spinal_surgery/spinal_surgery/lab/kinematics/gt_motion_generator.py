@@ -176,7 +176,7 @@ class GTDiscreteMotionGenerator:
         new_human_ee_quat: (num_envs, 4)
         '''
         cmd_diff = (self.goal_cmd_pose - cur_cmd_pose)
-        cmd_diff *= self.scale
+        # cmd_diff *= self.scale
 
         cmd_diff_3d = torch.stack([cmd_diff[:, 0], torch.zeros_like(cmd_diff[:, 0]), cmd_diff[:, 1]], dim=-1) # xyz
         zero_pos = torch.zeros_like(human_to_ee_pos)
@@ -188,7 +188,10 @@ class GTDiscreteMotionGenerator:
         cmd_diff_ee_pos = transform_points(cmd_diff_3d.unsqueeze(1), ee_to_human_pos, ee_to_human_quat)
         cmd_diff_ee_pos = cmd_diff_ee_pos.squeeze(1)
 
-        cmd_diff_ee = torch.sign(torch.cat([cmd_diff_ee_pos[:, 0:2], cmd_diff[:, 2:3]], dim=-1)) * self.scale
+        cmd_diff_ee = torch.cat([cmd_diff_ee_pos[:, 0:2], cmd_diff[:, 2:3]], dim=-1)
+        cmd_diff_ee_sign = torch.sign(cmd_diff_ee) * self.scale
+        large_index = abs(cmd_diff_ee) > abs(cmd_diff_ee_sign)
+        cmd_diff_ee[large_index] = cmd_diff_ee_sign[large_index]
         
         return cmd_diff_ee
     
@@ -219,6 +222,7 @@ class GTDiscreteMotionGenerator:
         z_axis = rot_mat[:, :, 2] # (num_envs, 3)
         x_axis = rot_mat[:, :, 0] # (num_envs, 3)
         angle = torch.atan2(x_axis[:, 2], x_axis[:, 0]) # (num_envs)
+        angle[angle < 0] += 2 * 3.1415926
         pos = human_to_target_pos + z_axis * self.height
         x_z = pos[:, [0, 2]] / self.label_res
 
