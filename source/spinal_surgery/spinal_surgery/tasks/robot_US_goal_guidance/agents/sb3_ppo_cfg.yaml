@@ -13,7 +13,7 @@ n_steps: 64 # 16
 batch_size: 512
 gae_lambda: 0.95
 gamma: 0.99
-n_epochs: 5 # 20
+n_epochs: 2 # 20
 ent_coef: 0.01
 policy_kwargs: "dict(
                   features_extractor_class=spinal_surgery.lab.feature_extractors.sb3_cnn_extractor.DeepCNN,

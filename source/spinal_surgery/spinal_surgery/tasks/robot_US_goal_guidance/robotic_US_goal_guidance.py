@@ -414,7 +414,7 @@ class roboticUSGoalEnv(DirectRLEnv):
         reward -= 0.001 * cur_distance_to_goal # faster to reach the goal
 
         self.total_reward += reward
-        print(self.total_reward)
+        # print(self.total_reward)
 
         return reward 
     
