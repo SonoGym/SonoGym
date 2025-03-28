@@ -34,6 +34,9 @@ sim:
   episode_length: 500
   expert_demo: False
   patient_xz_range: [[100, 70, 1.5], [180, 200, 3.5]]
+  curriculum:
+    init_patient_xz_range: [[100, 70, 1.5], [180, 200, 3.5]] # [[135, 130, 2.4], [145, 140, 2.6]] # 
+    num_episodes: 200
   patient_xz_init_range: [[100, 70, 1.5], [180, 200, 3.5]]
   if_use_ct: True
   ct_range: [-300, 3000]

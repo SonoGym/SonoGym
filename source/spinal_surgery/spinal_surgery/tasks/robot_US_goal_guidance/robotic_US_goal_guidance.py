@@ -149,12 +149,21 @@ class roboticUSGoalEnv(DirectRLEnv):
         # construct US simulator
         us_cfg = YAML().load(open(f"{PACKAGE_DIR}/lab/sensors/cfgs/us_cfg.yaml", 'r'))
         self.sim_cfg = scene_cfg['sim']
-        self.init_cmd_pose_min = torch.tensor(self.sim_cfg['patient_xz_init_range'][0], device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
-        self.init_cmd_pose_max = torch.tensor(self.sim_cfg['patient_xz_init_range'][1], device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
+        self.org_init_cmd_pose_min = torch.tensor(self.sim_cfg['patient_xz_init_range'][0], device=self.sim.device)
+        self.org_init_cmd_pose_max = torch.tensor(self.sim_cfg['patient_xz_init_range'][1], device=self.sim.device)
         if scene_cfg['observation']['3D']:
             img_thickness = us_cfg['image_3D_thickness']
         else:
             img_thickness = 1
+
+        # init range
+        patient_xz_range = self.sim_cfg['curriculum']['init_patient_xz_range']
+        init_patient_xz_range_tensor = torch.tensor(patient_xz_range).to(self.sim.device)
+        self.x_z_range_update_step = torch.minimum(
+            self.org_init_cmd_pose_max - init_patient_xz_range_tensor[1],
+            init_patient_xz_range_tensor[0] - self.org_init_cmd_pose_min,
+        ) / self.sim_cfg['curriculum']['num_episodes']
+        
         self.US_slicer = USSlicer(
             us_cfg,
             label_map_list, 
@@ -162,7 +171,7 @@ class roboticUSGoalEnv(DirectRLEnv):
             self.sim_cfg['if_use_ct'],
             human_stl_list,
             self.scene.num_envs, 
-            self.sim_cfg['patient_xz_range'], 
+            patient_xz_range, 
             self.sim_cfg['patient_xz_init_range'][0], 
             self.sim.device, 
             label_convert_map,
@@ -171,7 +180,7 @@ class roboticUSGoalEnv(DirectRLEnv):
             img_thickness=img_thickness,
             visualize=self.sim_cfg['vis_seg_map'],
         )
-        self.US_slicer.current_x_z_x_angle_cmd = (self.init_cmd_pose_min + self.init_cmd_pose_max) / 2
+        self.US_slicer.current_x_z_x_angle_cmd = (self.org_init_cmd_pose_min + self.org_init_cmd_pose_max) / 2
 
         self.human_world_poses = self.human.data.root_state_w # these are already the initial poses
 
@@ -483,7 +492,14 @@ class roboticUSGoalEnv(DirectRLEnv):
             # update buffers at sim dt
             self.scene.update(dt=self.physics_dt)
 
-
+    def curriculum_update(self): 
+        self.US_slicer.x_z_range[0] -= self.x_z_range_update_step
+        self.US_slicer.x_z_range[1] += self.x_z_range_update_step
+        self.init_cmd_pose_min = self.US_slicer.x_z_range[0]
+        self.init_cmd_pose_max = self.US_slicer.x_z_range[1]
+        self.goal_cmd_pose_min = self.US_slicer.x_z_range[0].reshape((1, -1)).repeat(self.scene.num_envs, 1)
+        self.goal_cmd_pose_max = self.US_slicer.x_z_range[1].reshape((1, -1)).repeat(self.scene.num_envs, 1)
+        print('curriculum updated', self.US_slicer.x_z_range)
 
     def _reset_idx(self, env_ids: Sequence[int] | None):
         if env_ids is None:
@@ -516,6 +532,9 @@ class roboticUSGoalEnv(DirectRLEnv):
         # define world to human poses
         self.world_to_human_pos, self.world_to_human_rot = self.human_world_poses[:, 0:3], self.human_world_poses[:, 3:7]
         self.world_to_base_pose = self.robot.data.root_link_state_w[:, 0:7]
+
+        # update curriculum
+        self.curriculum_update()
 
         # init 2d goal poses
         cmd_goal_poses = torch.rand((self.scene.num_envs, 3), device=self.sim.device)
@@ -571,6 +590,7 @@ class roboticUSGoalEnv(DirectRLEnv):
         self.distance_to_goal += torch.norm(self.cur_cmd_pose[:, 2:3] - self.goal_cmd_poses[:, 2:3], dim=-1)
 
         self.total_reward = torch.zeros(self.scene.num_envs, device=self.sim.device)
+
 
 
     def visualize_obs(self, obs, goal_obs, first_n=10):

@@ -19,6 +19,7 @@ import numpy as np
 from collections.abc import Sequence
 import gymnasium as gym
 import pyvista as pv
+import copy
 
 ##
 # Pre-defined configs
@@ -38,6 +39,7 @@ from ruamel.yaml import YAML
 from spinal_surgery import PACKAGE_DIR
 from spinal_surgery.lab.kinematics.gt_motion_generator import GTMotionGenerator, GTDiscreteMotionGenerator
 import cProfile
+from gymnasium.spaces import Dict
 
 scene_cfg = YAML().load(open(f"{PACKAGE_DIR}/tasks/robot_US_guided_surgery/cfgs/robotic_US_guided_surgery.yaml", 'r'))
 
@@ -68,6 +70,8 @@ INIT_STATE_ROBOT_DRILL = ArticulationCfg.InitialStateCfg(
     },
     pos = (float(robot_drill_cfg['pos'][0]), float(robot_drill_cfg['pos'][1]), float(robot_drill_cfg['pos'][2])) # ((0.0, -0.75, 0.4))
 )
+DRILL_TO_TIP_POS = np.array([0.0, 0.0, -0.135]).astype(np.float32)
+DRILL_TO_TIP_QUAT = R.from_euler("YXZ", [180, 0, 0], degrees=True).as_quat().astype(np.float32) 
 
 # patient
 patient_cfg = scene_cfg['patient']
@@ -98,6 +102,8 @@ human_raw_list = [
 target_anatomy = patient_cfg['target_anatomy']
 target_stl_file_list = [f"{ASSETS_DATA_DIR}/HumanModels/Totalsegmentator_dataset_v2_subset_stl/" + p_id + '/' + str(target_anatomy) + '.stl' 
                         for p_id in patient_cfg['id_list']]
+target_traj_file_list = [f"{ASSETS_DATA_DIR}/HumanModels/Totalsegmentator_dataset_v2_subset_stl/" +
+                          p_id + '/' + 'standard_right_traj_' + str(target_anatomy)[-2:] + '.stl' for p_id in patient_cfg['id_list']]
 
 usd_file_list = [human_file + "/combined_wrapwrap/combined_wrapwrap.usd" for human_file in human_usd_list]
 label_map_file_list = [human_file + "/combined_label_map.nii.gz" for human_file in human_stl_list]
@@ -113,10 +119,10 @@ scale = 1/label_res
 class roboticUSGuidedSurgeryCfg(DirectRLEnvCfg):
     # env
     decimation = 2
-    episode_length_s = 5 # 300
+    episode_length_s = scene_cfg['sim']['episode_length'] # 5 # 300
     action_scale = 1 
     action_space = 6
-    observation_space = [1, 150, 200]
+    observation_space = [1, 150 // scene_cfg['observation']['downsample'], 200 // scene_cfg['observation']['downsample']]
     state_space = 0
     observation_scale = scene_cfg['observation']['scale']
 
@@ -184,6 +190,13 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
             img_thickness = us_cfg['image_3D_thickness']
         else:
             img_thickness = 1
+
+        # down sample
+        res = scene_cfg['observation']['downsample']
+        us_cfg['image_size'] = [int(us_cfg['image_size'][0] / res), int(us_cfg['image_size'][1] / res)]
+        img_thickness = max(int(img_thickness // res), 1)
+        us_cfg['resolution'] = us_cfg['resolution'] * res
+
         self.US_slicer = USSlicer(
             us_cfg,
             label_map_list, 
@@ -211,25 +224,41 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
             self.scene.num_envs,
             len(human_usd_list),
             target_stl_file_list,
+            target_traj_file_list,
+            self.sim_cfg['vis_us'],
+            label_res,
             self.sim.device
         )
         
         # change observation space to image 
-        self.observation_space = gym.spaces.Box(
-            low=0,
-            high=255,
-            shape=(self.cfg.observation_space[0], self.cfg.observation_space[1], self.cfg.observation_space[2]),
-            dtype=np.uint8,
-        )
+        # self.observation_space = gym.spaces.Box(
+        #     low=0,
+        #     high=255,
+        #     shape=(self.cfg.observation_space[0], self.cfg.observation_space[1], self.cfg.observation_space[2]),
+        #     dtype=np.uint8,
+        # )
 
         self.cfg.observation_space[0] = self.US_slicer.img_thickness
 
-        self.single_observation_space['policy'] = gym.spaces.Box(
+        self.single_observation_space['policy'] = Dict({
+            'image': gym.spaces.Box(
             low=0,
             high=255,
             shape=(self.cfg.observation_space[0], self.cfg.observation_space[1], self.cfg.observation_space[2]),
             dtype=np.uint8,
-        )
+        ),
+        'pos': gym.spaces.Box(
+            low=-np.inf,
+            high=np.inf,
+            shape=(3,),
+            dtype=np.float32,
+        ),
+        'quat': gym.spaces.Box(
+            low=-np.inf,
+            high=np.inf,
+            shape=(4,),
+            dtype=np.float32,
+        )})
 
         self.termination_direct = True
         self.observation_mode = scene_cfg['observation']['mode']
@@ -237,14 +266,52 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.action_scale = torch.tensor(scene_cfg['action']['scale'], 
                                          device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
         
+        # for reward
+        self.safe_height = scene_cfg['reward']['safe_height']
+        self.w_pos = scene_cfg['reward']['w_pos']
+        self.w_angle = scene_cfg['reward']['w_angle']
+        self.w_cost = scene_cfg['reward']['w_cost']
+
+        # action scale
+        self.max_action = torch.tensor(scene_cfg['action']['max_action'], 
+                                       device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
+        self.min_action = -torch.tensor(scene_cfg['action']['max_action'], 
+                                       device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
+        # discrete action
+        if scene_cfg['action']['mode'] == 'discrete':
+            self.single_action_space = gym.spaces.Discrete(self.cfg.action_space*2 + 1)
 
 
     def get_US_target_pose(self):
         # compute position change
         vertebra_to_US_2d_pos = torch.tensor(scene_cfg['motion_planning']['vertebra_to_US_2d_pos']).to(self.sim.device)
+        rand_disturbance = (
+            torch.rand((self.scene.num_envs, 2), device=self.sim.device) 
+            * 2 * scene_cfg['motion_planning']['vertebra_to_US_rand_max']
+            - scene_cfg['motion_planning']['vertebra_to_US_rand_max']
+        )
         vertebra_2d_pos = self.vertebra_viewer.human_to_ver_per_envs[:, [0, 2]]
-        US_target_2d_pos = vertebra_2d_pos + vertebra_to_US_2d_pos.unsqueeze(0)
-        US_target_2d_angle = 1.57 * torch.ones_like(vertebra_2d_pos[:, 0:1])
+        US_target_2d_pos = vertebra_2d_pos + vertebra_to_US_2d_pos.unsqueeze(0) + rand_disturbance
+
+        # change roll adj
+        rand_dist_angle = (
+            torch.rand((self.scene.num_envs, 1), device=self.sim.device) 
+            * 2 * scene_cfg['motion_planning']['US_roll_rand_max']
+            - scene_cfg['motion_planning']['US_roll_rand_max']
+        )
+        self.US_slicer.roll_adj = (
+            scene_cfg['motion_planning']['US_roll_adj']
+            * torch.ones_like(vertebra_2d_pos[:, 0:1])
+            + rand_dist_angle
+        )
+
+        rand_dist_angle = (
+            torch.rand((self.scene.num_envs, 1), device=self.sim.device) 
+            * 2 * scene_cfg['motion_planning']['US_roll_rand_max']
+            - scene_cfg['motion_planning']['US_roll_rand_max']
+        )
+        US_target_2d_angle = 1.57 * torch.ones_like(vertebra_2d_pos[:, 0:1]) + rand_dist_angle
+
         US_target_2d = torch.cat([US_target_2d_pos, US_target_2d_angle], dim=-1)
 
         self.US_slicer.current_x_z_x_angle_cmd = US_target_2d
@@ -326,6 +393,24 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.scene.articulations["robot_drill"] = self.robot_drill
         self.scene.rigid_objects["human"] = self.human
 
+        self.drill_to_tip_pos = torch.tensor(DRILL_TO_TIP_POS, 
+                                             device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
+        self.drill_to_tip_quat = torch.tensor(DRILL_TO_TIP_QUAT,
+                                              device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
+
+    def action_discrete_to_continuous(self, action):
+        # action = 0, 1, 2,...,12
+        cont_actions = torch.zeros((self.scene.num_envs, self.cfg.action_space), device=self.sim.device)
+        total_inds = torch.arange(self.scene.num_envs, device=self.sim.device)
+
+        non_zero_inds = total_inds[action.reshape((-1,)) != 12] # (K_n,)
+        non_zero_dim = (action[non_zero_inds] // 2).to(torch.int) # 0, 1, 2, 3, 4, 5 (K_n,)
+
+        action_scale = self.max_action[non_zero_inds, :] # (k_n, 6)
+        action_scale = action_scale[torch.arange(action_scale.shape[0]).to(self.sim.device), non_zero_dim] / 2 # (k_n,)
+        action_sign = ((action[non_zero_inds] % 2) * 2 - 1) #(k_n, 6)
+        cont_actions[non_zero_inds, non_zero_dim] = action_scale * action_sign
+        return cont_actions
 
     def _get_observations(self) -> dict:
         # get human frame
@@ -338,21 +423,30 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         
         if self.observation_mode == "US":
             self.US_slicer.slice_US(self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7])
-            US_img = self.US_slicer.us_img_tensor.permute(0, 3, 1, 2) * self.cfg.observation_scale
-            observations = {"policy": US_img.to(torch.uint8)}
+            obs_img = self.US_slicer.us_img_tensor.permute(0, 3, 1, 2) * self.cfg.observation_scale
         elif self.observation_mode == "CT":
             self.US_slicer.slice_label_img(self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7])
-            CT_img = self.US_slicer.ct_img_tensor.permute(0, 3, 1, 2) * self.cfg.observation_scale
-            observations = {"policy": CT_img.to(torch.uint8)}
+            obs_img = self.US_slicer.ct_img_tensor.permute(0, 3, 1, 2) * self.cfg.observation_scale
+            
         elif self.observation_mode == "seg":
             self.US_slicer.slice_label_img(self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7])
-            label_img = self.US_slicer.label_img_tensor.permute(0, 3, 1, 2) * self.cfg.observation_scale
-            observations = {"policy": label_img.to(torch.uint8)}
+            obs_img = self.US_slicer.label_img_tensor.permute(0, 3, 1, 2) * self.cfg.observation_scale
         else:
             raise ValueError("Invalid observation mode")
-
+        
         if self.sim_cfg['vis_us']:
             self.US_slicer.visualize(self.observation_mode)
+        
+        # get drill to US pose
+        self.US_to_drill_pos, self.US_to_drill_quat = subtract_frame_transforms(
+            self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7],
+            self.drill_ee_pose_w[:, 0:3], self.drill_ee_pose_w[:, 3:7]
+        )
+
+        observations = {
+            "policy": {'image': obs_img.to(torch.uint8), 'pos': self.US_to_drill_pos, 'quat': self.US_to_drill_quat}}
+        
+        self.check_nan()
 
         return observations
 
@@ -361,7 +455,11 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         # control drill robot
         self.get_drill_ee_pose_b()
 
-        actions = actions * self.action_scale
+        if self.action_mode == 'discrete':
+            actions = self.action_discrete_to_continuous(actions)
+        else:
+            actions = actions * self.action_scale
+            actions = torch.clamp(actions, self.min_action, self.max_action)
 
         self.diff_ik_controller_drill.set_command(actions, 
             self.drill_ee_pos_b,
@@ -384,7 +482,73 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.robot_drill.set_joint_position_target(joint_pos_des, joint_ids=self.robot_drill_entity_cfg.joint_ids)
 
     def _get_rewards(self) -> torch.Tensor:
-        reward = 0
+
+        reward = torch.zeros(self.scene.num_envs, device=self.sim.device)
+        cost = torch.zeros(self.scene.num_envs, device=self.sim.device)
+
+        self.get_traj_to_tip_state()
+
+        if self.sim_cfg['vis_us']:
+            self.vertebra_viewer.update_tip_vis(self.human_to_tip_pos, self.human_to_tip_quat)
+        
+        # free space
+        free_region = self.tip_pos_along_traj <= - self.safe_height
+        reward[free_region] += self.w_pos * (
+            torch.abs(self.last_tip_pos_along_traj[free_region] + self.safe_height)
+            - torch.abs(self.tip_pos_along_traj[free_region] + self.safe_height)
+        )
+            
+        # safety critical space
+        safety_critical = self.tip_pos_along_traj > - self.safe_height
+        safe_close = torch.logical_and(
+            safety_critical,
+            self.tip_to_traj_dist < self.vertebra_viewer.traj_radius
+        )
+        safe_close = torch.logical_and(
+            safe_close,
+            self.last_tip_pos_along_traj < self.vertebra_viewer.traj_half_length
+        )
+        unsafe = torch.logical_and(torch.logical_not(safe_close), safety_critical)
+
+        reward[safe_close] += self.w_pos * (
+            torch.abs(self.last_tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
+            - torch.abs(self.tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
+        )
+        reward[unsafe] += self.w_pos * (
+            torch.abs(self.last_tip_pos_along_traj[unsafe] + self.safe_height)
+            - torch.abs(self.tip_pos_along_traj[unsafe] + self.safe_height)
+        )
+
+        cost[unsafe] = 1
+
+        reward += self.w_pos * (self.last_tip_to_traj_dist - self.tip_to_traj_dist)
+        reward += self.w_angle * (self.last_traj_to_tip_sin - self.traj_to_tip_sin)
+        reward -= cost * self.w_cost
+
+        self.last_tip_pos_along_traj = copy.deepcopy(self.tip_pos_along_traj)
+        self.last_tip_to_traj_dist = copy.deepcopy(self.tip_to_traj_dist)
+        self.last_traj_to_tip_sin = copy.deepcopy(self.traj_to_tip_sin)
+
+        # print('free_region', free_region)
+        # print('last_tip_pos_along_traj', self.last_tip_pos_along_traj)
+        # print('tip_pos_along_traj', self.tip_pos_along_traj)
+        # print('')
+        # print('human_to_tip_pos', self.human_to_tip_pos)
+        # print('tip_to_traj_dist', self.tip_to_traj_dist)
+        # print('traj_to_tip_sin', self.traj_to_tip_sin)
+        # print('')
+        # print('safety_critical', safety_critical)
+        # print('unsafe', unsafe)
+        # print('reward', reward)
+        # print('cost', cost)
+        # print('')
+
+        self.total_rewards += reward
+        self.total_costs += cost
+
+        # print('total_rewards', self.total_rewards)
+        # print('total_costs', self.total_costs)
+
         return reward 
     
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
@@ -454,7 +618,8 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.US_ee_pose_w = self.robot.data.body_state_w[:, self.robot_entity_cfg.body_ids[-1], 0:7]
         # compute frame in root frame
         self.US_ee_pos_b, self.US_ee_quat_b = subtract_frame_transforms(
-            self.US_root_pose_w[:, 0:3], self.US_root_pose_w[:, 3:7], self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
+            self.US_root_pose_w[:, 0:3], self.US_root_pose_w[:, 3:7], 
+            self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
         )
 
     def get_drill_ee_pose_b(self):
@@ -463,8 +628,24 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.drill_ee_pose_w = self.robot_drill.data.body_state_w[:, self.robot_drill_entity_cfg.body_ids[-1], 0:7]
         # compute frame in root frame
         self.drill_ee_pos_b, self.drill_ee_quat_b = subtract_frame_transforms(
-            self.drill_root_pose_w[:, 0:3], self.drill_root_pose_w[:, 3:7], self.drill_ee_pose_w[:, 0:3], self.drill_ee_pose_w[:, 3:7]
+            self.drill_root_pose_w[:, 0:3], self.drill_root_pose_w[:, 3:7], 
+            self.drill_ee_pose_w[:, 0:3], self.drill_ee_pose_w[:, 3:7]
         )
+        
+
+    def get_traj_to_tip_state(self):
+        self.human_to_ee_pos, self.human_to_ee_quat = subtract_frame_transforms(
+            self.world_to_human_pos, self.world_to_human_rot, 
+            self.drill_ee_pose_w[:, 0:3], self.drill_ee_pose_w[:, 3:7]
+        )
+        self.human_to_tip_pos, self.human_to_tip_quat = combine_frame_transforms(
+            self.human_to_ee_pos, self.human_to_ee_quat, self.drill_to_tip_pos, self.drill_to_tip_quat
+        )
+        self.tip_pos_along_traj, self.tip_to_traj_dist, self.traj_to_tip_sin = self.vertebra_viewer.compute_tip_in_traj(
+            self.human_to_tip_pos, self.human_to_tip_quat
+        )
+
+
 
     def reset_controllers(self):
         self.pose_diff_ik_controller.reset()
@@ -513,6 +694,54 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         # compute joint positions
         # set joint positions
         self._move_towards_target(self.US_slicer.human_to_ee_target_pos, self.US_slicer.human_to_ee_target_quat)
+
+        self.get_drill_ee_pose_b()
+        self.get_traj_to_tip_state()
+        self.last_tip_pos_along_traj = copy.deepcopy(self.tip_pos_along_traj)
+        self.last_tip_to_traj_dist = copy.deepcopy(self.tip_to_traj_dist)
+        self.last_traj_to_tip_sin = copy.deepcopy(self.traj_to_tip_sin)
+
+        self.total_rewards = torch.zeros(self.scene.num_envs, device=self.sim.device)
+        self.total_costs = torch.zeros(self.scene.num_envs, device=self.sim.device)
+
+    def check_nan(self):
+        if torch.isnan(self.US_ee_pos_b).any() or torch.isnan(self.US_ee_quat_b).any():
+            print('US_ee_pos_b', self.US_ee_pos_b)
+            print('US_ee_quat_b', self.US_ee_quat_b)
+            raise ValueError('nan value detected')
+        if torch.isnan(self.drill_ee_pos_b).any() or torch.isnan(self.drill_ee_quat_b).any():
+            print('drill_ee_pos_b', self.drill_ee_pos_b)
+            print('drill_ee_quat_b', self.drill_ee_quat_b)
+            raise ValueError('nan value detected')
+        if torch.isnan(self.human_to_tip_pos).any() or torch.isnan(self.human_to_tip_quat).any():
+            print('human_to_tip_pos', self.human_to_tip_pos)
+            print('human_to_tip_quat', self.human_to_tip_quat)
+            raise ValueError('nan value detected')
+        if torch.isnan(self.tip_pos_along_traj).any() or torch.isnan(self.tip_to_traj_dist).any() or torch.isnan(self.traj_to_tip_sin).any():
+            print('tip_pos_along_traj', self.tip_pos_along_traj)
+            print('tip_to_traj_dist', self.tip_to_traj_dist)
+            print('traj_to_tip_sin', self.traj_to_tip_sin)
+            raise ValueError('nan value detected')
+        if torch.isnan(self.total_rewards).any() or torch.isnan(self.total_costs).any():
+            print('total_rewards', self.total_rewards)
+            print('total_costs', self.total_costs)
+            raise ValueError('nan value detected')
+        if torch.isnan(self.last_tip_pos_along_traj).any() or torch.isnan(self.last_tip_to_traj_dist).any() or torch.isnan(self.last_traj_to_tip_sin).any():
+            print('last_tip_pos_along_traj', self.last_tip_pos_along_traj)
+            print('last_tip_to_traj_dist', self.last_tip_to_traj_dist)
+            print('last_traj_to_tip_sin', self.last_traj_to_tip_sin)
+            raise ValueError('nan value detected')
+        if torch.isnan(self.US_slicer.ct_img_tensor).any():
+            print('ct_img_tensor', self.US_slicer.human_to_ee_target_pos)
+            raise ValueError('nan value detected')
+        if torch.isnan(self.US_slicer.label_img_tensor).any():
+            print('label_img_tensor', self.US_slicer.human_to_ee_target_pos)
+            raise ValueError('nan value detected')
+        if torch.isnan(self.US_to_drill_pos).any() or torch.isnan(self.US_to_drill_quat).any():
+            print('US_to_drill_pos', self.US_to_drill_pos)
+            print('US_to_drill_quat', self.US_to_drill_quat)
+            raise ValueError('nan value detected')
+
 
 
 

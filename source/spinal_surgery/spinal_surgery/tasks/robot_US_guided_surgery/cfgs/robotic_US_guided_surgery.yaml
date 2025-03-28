@@ -4,40 +4,50 @@ robot:
 
 robot_drill:
   pos: [0.0, 0.4, 0.0]
-  joint_pos: [-1.5, -0.1, 0.0, -1.0, 0.0, 2.0, 0.0]
+  joint_pos: [-1.5, -0.3, 0.0, -1.3, 0.0, 2.0, 0.0]
 
 patient:
-  pos: [0.2, -0.25, 0.7]
+  pos: [0.2, -0.2, 0.7]
   euler_yxz: [-90.0, -90.0, 0.0]
   id_list: ['s0010'] # 's0010', 's0014', 's0015'
   label_res: 0.0015 # m
-  target_anatomy: 'vertebrae_L3'
+  target_anatomy: 'vertebrae_L4'
 
 bed:
-  pos: [0.0, 0.0, 0.2]
+  pos: [0.0, 0.0, 0.1]
   euler_xyz: [90, 0.0, 90]
   scale: 0.0004
 
 motion_planning:
-  vertebra_to_US_2d_pos: [-30.0, 0.0]
+  vertebra_to_US_2d_pos: [-25.0, 0.0]
   US_roll_adj: -0.4
+  vertebra_to_US_rand_max: 10.0
+  US_roll_rand_max: 0.1
   scale: [[2, 2, 0.1]]
 
 observation: 
   3D: True
+  downsample: 4
   mode: 'CT' # 'seg', 'CT', 'US'
   scale: 0.1 # 0.1, 0.0005, 0.003
 
 action: 
-  mode: 'continuous' # 'discrete', 'continuous'
+  mode: 'discrete' # 'discrete', 'continuous'
   scale: [0.1, 0.1, 0.1, 1.0, 1.0, 1.0]
-  max_action: [4, 4, 0.2]
+  max_action: [0.01, 0.01, 0.01, 0.05, 0.05, 0.05]
+
+reward:
+  safe_height: 0.1 # 10 cm
+  w_pos: 10.0
+  w_angle: 10.0
+  w_cost: 0.01
+
 
 sim:
-  episode_length: 500
+  episode_length: 10
   patient_xz_range: [[100, 70, 1.5], [180, 200, 3.5]]
   patient_xz_init_range: [[100, 70, 1.5], [180, 200, 3.5]]
   if_use_ct: True
   ct_range: [-300, 3000]
-  vis_us: True
+  vis_us: False
   vis_seg_map: False
