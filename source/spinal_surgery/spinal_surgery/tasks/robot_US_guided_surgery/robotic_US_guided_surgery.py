@@ -531,7 +531,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
 
         # print('free_region', free_region)
         # print('last_tip_pos_along_traj', self.last_tip_pos_along_traj)
-        # print('tip_pos_along_traj', self.tip_pos_along_traj)
+        print('tip_pos_along_traj', self.tip_pos_along_traj)
         # print('')
         # print('human_to_tip_pos', self.human_to_tip_pos)
         # print('tip_to_traj_dist', self.tip_to_traj_dist)

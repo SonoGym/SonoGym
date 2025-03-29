@@ -32,15 +32,15 @@ observation:
   scale: 0.1 # 0.1, 0.0005, 0.003
 
 action: 
-  mode: 'discrete' # 'discrete', 'continuous'
+  mode: 'continuous' # 'discrete', 'continuous'
   scale: [0.1, 0.1, 0.1, 1.0, 1.0, 1.0]
   max_action: [0.01, 0.01, 0.01, 0.05, 0.05, 0.05]
 
 reward:
-  safe_height: 0.1 # 10 cm
+  safe_height: 0.10 # 10 cm
   w_pos: 10.0
   w_angle: 10.0
-  w_cost: 0.01
+  w_cost: 0.1
 
 
 sim:
@@ -49,5 +49,5 @@ sim:
   patient_xz_init_range: [[100, 70, 1.5], [180, 200, 3.5]]
   if_use_ct: True
   ct_range: [-300, 3000]
-  vis_us: False
+  vis_us: True
   vis_seg_map: False

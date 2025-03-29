@@ -1,6 +1,8 @@
 import torch
 import pyvista as pv
-from isaaclab.utils.math import subtract_frame_transforms, combine_frame_transforms, matrix_from_quat, quat_from_matrix
+from isaaclab.utils.math import subtract_frame_transforms, combine_frame_transforms 
+from isaaclab.utils.math import matrix_from_quat, quat_from_matrix, transform_points
+import numpy as np
 
 class VertebraViewer:
     def __init__(self, num_envs, n_human_types, vertebra_file_list, traj_file_list, if_vis, res, device):
@@ -38,7 +40,15 @@ class VertebraViewer:
 
         # visualize
         if self.if_vis:
-
+            self.tip_points_a = torch.zeros((self.num_envs, 3), device=self.device)
+            self.tip_points_b = torch.zeros((self.num_envs, 3), device=self.device)
+            self.tip_points_b[:, 2] = -20
+            self.tip_points_ab = torch.stack([self.tip_points_a, self.tip_points_b], dim=1)
+            self.tip_line_list = []
+            for i in range(self.num_envs):
+                tip_line = pv.Line(pointa=self.tip_points_a[i, :].cpu().numpy(), 
+                                   pointb=self.tip_points_b[i, :].cpu().numpy())
+                self.tip_line_list.append(tip_line)
             self.visualize()
 
 
@@ -103,33 +113,33 @@ class VertebraViewer:
         return pos_along_drct, distance_to_traj, sin_angle
 
 
-    def visualize(self, inds=[0]):
+    def visualize(self, index=0):
         self.p = pv.Plotter()
         
-        for ind in inds:
-            self.p.add_mesh(pv.PolyData(self.vertebra_points_np_list[ind]), color='red', point_size=0.5)
-            self.p.add_mesh(pv.PolyData(self.traj_points_np_list[ind]), color='blue', point_size=0.5)
-            traj_center_np = self.traj_center_list[ind].cpu().numpy()
-            traj_drct_np = self.traj_drct_list[ind].cpu().numpy()
-            self.p.add_arrows(traj_center_np, traj_drct_np * 10, mag=1, color='green')
-
+        tip_points_a_np = self.tip_points_a.cpu().numpy()
+        tip_points_b_np = self.tip_points_b.cpu().numpy()
+        for i in range(self.num_envs):
+            self.tip_line_list[i].points = np.stack([tip_points_a_np[i], 
+                                                     tip_points_b_np[i]], axis=0)
+            if i%self.n_human_types == index:
+                self.p.add_mesh(self.tip_line_list[i], color='blue')
         # add tip representation
-        self.tip_cylinder = pv.Cylinder(center=[0, 0, 0], direction=[0, 1, 0], height=20, radius=5)
-        self.tip_actor = self.p.add_mesh(self.tip_cylinder, color='yellow')
-            
+
+        self.p.add_mesh(self.vertebra_points_np_list[index], color='red', point_size=0.5)
+        self.p.add_mesh(self.traj_points_np_list[index], color='green', point_size=0.5)
+
         self.p.show(interactive_update=True)
         self.p.show_axes()
 
         
     def update_tip_vis(self, human_to_tip_pos, human_to_tip_rot):
-        scaled_pos = human_to_tip_pos[0, :].cpu().numpy() / self.res
-        human_to_tip_rot_mat = matrix_from_quat(human_to_tip_rot[0, :])
-        tip_drct = human_to_tip_rot_mat[:, 2]
-        self.p.remove_actor(self.tip_actor)
-        self.tip_cylinder = pv.Cylinder(
-            center=scaled_pos - 10 * tip_drct.cpu().numpy(), 
-            direction=-tip_drct.cpu().numpy(), height=20, radius=5)
-        self.tip_actor = self.p.add_mesh(self.tip_cylinder, color='yellow')
+        scaled_pos = human_to_tip_pos / self.res
+        tip_points_ab = transform_points(self.tip_points_ab, scaled_pos, human_to_tip_rot)
+        tip_points_a_np = tip_points_ab[:, 0, :].cpu().numpy()
+        tip_points_b_np = tip_points_ab[:, 1, :].cpu().numpy()
+        for i in range(self.num_envs):
+            self.tip_line_list[i].points = np.stack([tip_points_a_np[i], 
+                                                     tip_points_b_np[i]], axis=0)
         self.p.update()
         
 
