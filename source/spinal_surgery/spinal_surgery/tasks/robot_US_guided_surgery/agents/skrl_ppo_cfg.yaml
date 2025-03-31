@@ -98,7 +98,7 @@ agent:
   time_limit_bootstrap: False
   # logging and checkpoint
   experiment:
-    directory: "surgery-first"
+    directory: "surgery_insertion_50_cost_10_nstep_16_bs_4_deep"
     experiment_name: ""
     write_interval: auto
     checkpoint_interval: auto
@@ -108,5 +108,5 @@ agent:
 # https://skrl.readthedocs.io/en/latest/api/trainers/sequential.html
 trainer:
   class: SequentialTrainer
-  timesteps: 200000
+  timesteps: 500000
   environment_info: log

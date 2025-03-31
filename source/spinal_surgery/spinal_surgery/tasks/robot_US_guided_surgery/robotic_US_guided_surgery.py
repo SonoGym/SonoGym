@@ -271,6 +271,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.w_pos = scene_cfg['reward']['w_pos']
         self.w_angle = scene_cfg['reward']['w_angle']
         self.w_cost = scene_cfg['reward']['w_cost']
+        self.w_insertion = scene_cfg['reward']['w_insertion']
 
         # action scale
         self.max_action = torch.tensor(scene_cfg['action']['max_action'], 
@@ -510,16 +511,15 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         )
         unsafe = torch.logical_and(torch.logical_not(safe_close), safety_critical)
 
-        reward[safe_close] += self.w_pos * (
+        reward[safe_close] += self.w_insertion * (
             torch.abs(self.last_tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
             - torch.abs(self.tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
         )
-        reward[unsafe] += self.w_pos * (
-            torch.abs(self.last_tip_pos_along_traj[unsafe] + self.safe_height)
-            - torch.abs(self.tip_pos_along_traj[unsafe] + self.safe_height)
-        )
+        
+        # unsafe penalty
+        last_safe_now_unsafe = torch.logical_and(torch.logical_not(self.last_unsafe), unsafe)
 
-        cost[unsafe] = 1
+        cost[last_safe_now_unsafe] = 1
 
         reward += self.w_pos * (self.last_tip_to_traj_dist - self.tip_to_traj_dist)
         reward += self.w_angle * (self.last_traj_to_tip_sin - self.traj_to_tip_sin)
@@ -528,10 +528,11 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.last_tip_pos_along_traj = copy.deepcopy(self.tip_pos_along_traj)
         self.last_tip_to_traj_dist = copy.deepcopy(self.tip_to_traj_dist)
         self.last_traj_to_tip_sin = copy.deepcopy(self.traj_to_tip_sin)
+        self.last_unsafe = copy.deepcopy(unsafe)
 
         # print('free_region', free_region)
         # print('last_tip_pos_along_traj', self.last_tip_pos_along_traj)
-        print('tip_pos_along_traj', self.tip_pos_along_traj)
+        # print('tip_pos_along_traj', self.tip_pos_along_traj)
         # print('')
         # print('human_to_tip_pos', self.human_to_tip_pos)
         # print('tip_to_traj_dist', self.tip_to_traj_dist)
@@ -700,6 +701,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.last_tip_pos_along_traj = copy.deepcopy(self.tip_pos_along_traj)
         self.last_tip_to_traj_dist = copy.deepcopy(self.tip_to_traj_dist)
         self.last_traj_to_tip_sin = copy.deepcopy(self.traj_to_tip_sin)
+        self.last_unsafe = torch.zeros(self.scene.num_envs, device=self.sim.device)
 
         self.total_rewards = torch.zeros(self.scene.num_envs, device=self.sim.device)
         self.total_costs = torch.zeros(self.scene.num_envs, device=self.sim.device)

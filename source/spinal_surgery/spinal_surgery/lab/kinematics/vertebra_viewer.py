@@ -90,7 +90,7 @@ class VertebraViewer:
 
             # get radius
             radius = torch.norm(centered_points, dim=-1).mean() ** 2 - half_length ** 2
-            self.traj_radius_list.append(radius)
+            self.traj_radius_list.append(torch.sqrt(radius))
 
             i += 1
 
@@ -127,6 +127,8 @@ class VertebraViewer:
 
         self.p.add_mesh(self.vertebra_points_np_list[index], color='red', point_size=0.5)
         self.p.add_mesh(self.traj_points_np_list[index], color='green', point_size=0.5)
+        self.p.add_mesh(pv.Sphere(center=self.human_to_traj_pos[index].cpu().numpy() / self.res, 
+                                  radius=self.traj_radius[index].item()/self.res), color='green', opacity=0.5)
 
         self.p.show(interactive_update=True)
         self.p.show_axes()
