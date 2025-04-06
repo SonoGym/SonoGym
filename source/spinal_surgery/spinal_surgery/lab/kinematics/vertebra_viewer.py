@@ -25,6 +25,7 @@ class VertebraViewer:
         # human_to_ver per envs
         self.env_to_human_inds = torch.arange(self.num_envs, device=self.device) % self.n_human_types 
         self.human_to_ver_per_envs = self.human_to_ver_per_human[self.env_to_human_inds] # (N, 3)
+        self.human_to_ver_per_envs_real = self.human_to_ver_per_envs * self.res # (N, 3)
 
         # trajectory points
         self.traj_points_np_list = [pv.read(traj_file).points for traj_file in traj_file_list]

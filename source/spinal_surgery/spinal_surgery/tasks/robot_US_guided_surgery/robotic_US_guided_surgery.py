@@ -194,6 +194,12 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         # down sample
         res = scene_cfg['observation']['downsample']
         us_cfg['image_size'] = [int(us_cfg['image_size'][0] / res), int(us_cfg['image_size'][1] / res)]
+        us_cfg['system_params']['sx_E'] = us_cfg['system_params']['sx_E'] / np.sqrt(res) 
+        us_cfg['system_params']['sy_E'] = us_cfg['system_params']['sy_E'] / np.sqrt(res)
+        us_cfg['system_params']['sx_B'] = us_cfg['system_params']['sx_B'] / np.sqrt(res)
+        us_cfg['system_params']['sy_B'] = us_cfg['system_params']['sy_B'] / np.sqrt(res)
+        us_cfg['system_params']['I0'] *= np.sqrt(res)
+        us_cfg['E_S_ratio'] /= np.sqrt(res)
         img_thickness = max(int(img_thickness // res), 1)
         us_cfg['resolution'] = us_cfg['resolution'] * res
 
@@ -237,6 +243,9 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         #     shape=(self.cfg.observation_space[0], self.cfg.observation_space[1], self.cfg.observation_space[2]),
         #     dtype=np.uint8,
         # )
+        # drill rand
+        self.rand_joint_pos_max = torch.tensor(motion_plan_cfg['joint_pos_rand_max']
+                                                 ).reshape((1, -1)).repeat(self.scene.num_envs, 1).to(self.sim.device)
 
         self.cfg.observation_space[0] = self.US_slicer.img_thickness
 
@@ -318,6 +327,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.US_slicer.current_x_z_x_angle_cmd = US_target_2d
         world_to_ee_init_pos, world_to_ee_init_rot = self.US_slicer.compute_world_ee_pose_from_cmd(
             self.world_to_human_pos, self.world_to_human_rot)
+        
         
 
     def _setup_scene(self):
@@ -462,6 +472,13 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
             actions = actions * self.action_scale
             actions = torch.clamp(actions, self.min_action, self.max_action)
 
+        # apply physics constraints
+        self.get_traj_to_tip_state()
+        
+        # safety_critical = self.tip_pos_along_traj > - self.safe_height
+        # actions[safety_critical, 0:2] *= 0.1
+        # actions[safety_critical, 3:] *= 0.1
+
         self.diff_ik_controller_drill.set_command(actions, 
             self.drill_ee_pos_b,
             self.drill_ee_quat_b)
@@ -487,8 +504,6 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         reward = torch.zeros(self.scene.num_envs, device=self.sim.device)
         cost = torch.zeros(self.scene.num_envs, device=self.sim.device)
 
-        self.get_traj_to_tip_state()
-
         if self.sim_cfg['vis_us']:
             self.vertebra_viewer.update_tip_vis(self.human_to_tip_pos, self.human_to_tip_quat)
         
@@ -511,24 +526,53 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         )
         unsafe = torch.logical_and(torch.logical_not(safe_close), safety_critical)
 
+        # reward insertion
         reward[safe_close] += self.w_insertion * (
             torch.abs(self.last_tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
             - torch.abs(self.tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
         )
+        self.total_insertion[safe_close] += (
+            torch.abs(self.last_tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
+            - torch.abs(self.tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
+        )
+
+        # last safe now free
+        # last_unsafe_now_free = torch.logical_and(self.last_unsafe, free_region)
+        # reward[last_unsafe_now_free] += self.w_cost * 0.5
+
+        # reward[unsafe] += self.w_pos * (
+        #     torch.abs(self.last_tip_pos_along_traj[unsafe] + self.safe_height)
+        #     - torch.abs(self.tip_pos_along_traj[unsafe] + self.safe_height)
+        # )
         
         # unsafe penalty
-        last_safe_now_unsafe = torch.logical_and(torch.logical_not(self.last_unsafe), unsafe)
+        # last_safe_now_unsafe = torch.logical_and(torch.logical_not(self.last_unsafe), unsafe)
+        last_safe_close_now_unsafe = torch.logical_and(
+            self.last_safe_close,
+            unsafe
+        )
+        last_unsafe_now_safe_close = torch.logical_and(
+            unsafe,
+            safe_close
+        )
+        reward[last_unsafe_now_safe_close] += self.w_cost * 0.9 * self.total_insertion[last_unsafe_now_safe_close]
 
-        cost[last_safe_now_unsafe] = 1
+        cost[last_safe_close_now_unsafe] = self.total_insertion[last_safe_close_now_unsafe]
 
-        reward += self.w_pos * (self.last_tip_to_traj_dist - self.tip_to_traj_dist)
-        reward += self.w_angle * (self.last_traj_to_tip_sin - self.traj_to_tip_sin)
+        reward[safe_close] += self.w_pos * (self.last_tip_to_traj_dist[safe_close] - self.tip_to_traj_dist[safe_close])
+        reward[safe_close] += self.w_angle * (self.last_traj_to_tip_sin[safe_close] - self.traj_to_tip_sin[safe_close])
+        reward[free_region] += self.w_pos * (self.last_tip_to_traj_dist[free_region] - self.tip_to_traj_dist[free_region])
+        reward[free_region] += self.w_angle * (self.last_traj_to_tip_sin[free_region] - self.traj_to_tip_sin[free_region])
+        # reward += self.w_pos * (self.last_tip_to_traj_dist - self.tip_to_traj_dist)
+        # reward += self.w_angle * (self.last_traj_to_tip_sin - self.traj_to_tip_sin)
+        # reward -= cost * self.w_cost
         reward -= cost * self.w_cost
 
         self.last_tip_pos_along_traj = copy.deepcopy(self.tip_pos_along_traj)
         self.last_tip_to_traj_dist = copy.deepcopy(self.tip_to_traj_dist)
         self.last_traj_to_tip_sin = copy.deepcopy(self.traj_to_tip_sin)
         self.last_unsafe = copy.deepcopy(unsafe)
+        self.last_safe_close = copy.deepcopy(safe_close)
 
         # print('free_region', free_region)
         # print('last_tip_pos_along_traj', self.last_tip_pos_along_traj)
@@ -547,8 +591,10 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.total_rewards += reward
         self.total_costs += cost
 
-        # print('total_rewards', self.total_rewards)
+        print('total_rewards', self.total_rewards)
         # print('total_costs', self.total_costs)
+        # TODO: update cost for safe learning
+        self.extras['cost'] = unsafe.to(torch.float32)
 
         return reward 
     
@@ -563,7 +609,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
     
     def _move_towards_target(self, 
                              human_ee_target_pos: torch.Tensor, human_ee_target_quat: torch.Tensor,
-                             num_steps: int = 100):
+                             num_steps: int = 200):
         is_rendering = self.sim.has_gui() or self.sim.has_rtx_sensors()
 
         for _ in range(num_steps):
@@ -581,7 +627,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
             self.get_US_ee_pose_b()
 
             base_to_ee_target_pos, base_to_ee_target_quat = subtract_frame_transforms(
-               self. world_to_base_pose[:, 0:3],self. world_to_base_pose[:, 3:7], world_ee_target_pos, world_ee_target_quat
+               self.world_to_base_pose[:, 0:3], self.world_to_base_pose[:, 3:7], world_ee_target_pos, world_ee_target_quat
             )
             base_to_ee_target_pose = torch.cat([base_to_ee_target_pos, base_to_ee_target_quat], dim=-1)
             
@@ -672,13 +718,18 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         joint_vel = self.robot.data.default_joint_vel.clone()
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel)
         self.robot.reset()
-        joint_pos = self.robot_drill.data.default_joint_pos.clone()
-        joint_vel = self.robot_drill.data.default_joint_vel.clone()
-        self.robot_drill.write_joint_state_to_sim(joint_pos, joint_vel)
-        self.robot_drill.reset()
-        self.robot_drill.set_joint_position_target(joint_pos, joint_ids=self.robot_drill_entity_cfg.joint_ids)
         self.robot.set_joint_position_target(joint_pos, joint_ids=self.robot_entity_cfg.joint_ids)
 
+        joint_pos = self.robot_drill.data.default_joint_pos.clone()
+        joint_vel = self.robot_drill.data.default_joint_vel.clone()
+        
+        rand_joint_pos = torch.rand((self.scene.num_envs, self.rand_joint_pos_max.shape[1]), device=self.sim.device) * 2 - 1
+        rand_joint_pos = rand_joint_pos * self.rand_joint_pos_max
+
+        self.robot_drill.write_joint_state_to_sim(joint_pos + rand_joint_pos, joint_vel)
+        self.robot_drill.reset()
+        self.robot_drill.set_joint_position_target(joint_pos + rand_joint_pos, joint_ids=self.robot_drill_entity_cfg.joint_ids)
+        
         self.reset_controllers()
 
         # inverse kinematics?
@@ -702,6 +753,8 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.last_tip_to_traj_dist = copy.deepcopy(self.tip_to_traj_dist)
         self.last_traj_to_tip_sin = copy.deepcopy(self.traj_to_tip_sin)
         self.last_unsafe = torch.zeros(self.scene.num_envs, device=self.sim.device)
+        self.last_safe_close = torch.zeros(self.scene.num_envs, device=self.sim.device)
+        self.total_insertion = torch.zeros(self.scene.num_envs, device=self.sim.device)
 
         self.total_rewards = torch.zeros(self.scene.num_envs, device=self.sim.device)
         self.total_costs = torch.zeros(self.scene.num_envs, device=self.sim.device)

@@ -47,8 +47,8 @@ class HumanFrameViewer:
             self.w_axis = np.array(self.plane_axes['w'])
             self.h_axis = np.array(self.plane_axes['h'])
 
-            self.w_axis_tensor = torch.tensor(self.plane_axes['w'], device=human_to_ee_pos.device)
-            self.h_axis_tensor = torch.tensor(self.plane_axes['h'], device=human_to_ee_pos.device)
+            self.w_axis_tensor = torch.tensor(self.plane_axes['w'], device=device)
+            self.h_axis_tensor = torch.tensor(self.plane_axes['h'], device=device)
 
             self.np_linear_space = np.linspace(0.0, 10, 5).reshape((-1, 1))
             
@@ -56,7 +56,7 @@ class HumanFrameViewer:
                 # create axis
                 
                 ee_w_points = self.np_linear_space * self.w_axis.reshape((1, -1)) + height_img / self.label_res * self.h_axis.reshape((1, -1))
-                ee_h_points = (self.np_linear_space + height_img / self.label_res) * h_axis.reshape((1, -1))
+                ee_h_points = (self.np_linear_space + height_img / self.label_res) * self.h_axis.reshape((1, -1))
                 w_axis_pv = pv.PolyData(ee_w_points)
                 h_axis_pv = pv.PolyData(ee_h_points)
                 

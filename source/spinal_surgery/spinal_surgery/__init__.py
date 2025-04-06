@@ -5,7 +5,6 @@ Python module serving as a project/extension template.
 # Register Gym environments.
 import os
 
-from .scenes import *
 from .lab import *
 from .tasks import *
 

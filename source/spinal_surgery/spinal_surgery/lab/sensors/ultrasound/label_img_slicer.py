@@ -44,10 +44,6 @@ class LabelImgSlicer(SurfaceMotionPlanner):
         # TODO: add CT maps
         self.ct_maps = [torch.tensor(ct_map, dtype=torch.uint8, device=device) for ct_map in ct_maps]
 
-        for i in range(self.n_human_types):
-            for key, value in label_convert_map.items():
-                self.label_maps[i][self.label_maps[i] == key] = value
-
         # construct images
         self.label_img_tensor = torch.zeros((self.num_envs, self.img_size[0], self.img_size[1], self.img_thickness), 
                                             dtype=torch.uint8, 
@@ -184,7 +180,7 @@ class LabelImgSlicer(SurfaceMotionPlanner):
 
             cv2.imshow("Label Image Update", combined_img_np.T / np.max(combined_img_np))
             cv2.waitKey(1)
-        if key=='CT' or key=='US':
+        elif key=='CT' or key=='US':
 
             combined_ct = self.ct_img_tensor[:first_n, :, :, 0].reshape((first_n * self.img_size[0], self.img_size[1])) # (w * first_n, h)
 

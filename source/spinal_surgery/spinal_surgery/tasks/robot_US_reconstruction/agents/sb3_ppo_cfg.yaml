@@ -1,0 +1,22 @@
+seed: 42
+
+n_timesteps: !!float 10e6
+policy: 'CnnPolicy'
+n_steps: 128 # 16
+batch_size: 1024
+gae_lambda: 0.95
+gamma: 0.99
+n_epochs: 1 # 20
+ent_coef: 0.01
+policy_kwargs: "dict(
+                  features_extractor_class=spinal_surgery.lab.feature_extractors.sb3_cnn_extractor.DeepCNN,
+                  features_extractor_kwargs=dict(
+                    features_dim=512,
+                    num_channels=[32, 64, 128, 256, 512]
+                  ),
+                )"
+learning_rate: !!float 3e-4
+clip_range: !!float 0.2
+vf_coef: 1.0
+max_grad_norm: 1.0
+device: "cuda:0"

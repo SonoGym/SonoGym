@@ -14,23 +14,19 @@ models:
     initial_log_std: 0.0
     network:
       - name: features_extractor
-        input: STATES["image"]  # PyTorch NHWC -> NCHW
+        input: STATES["reconstruction"]  # PyTorch NHWC -> NCHW
         layers:
           - conv2d: {out_channels: 32, kernel_size: 8, stride: 2, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 3, stride: 1, padding: 0}
           - flatten
         activations: relu
-      - name: net_pos
-        input: STATES["pos"]
-        layers: [128, 128, 64]
-        activations: elu
-      - name: net_quat
-        input: STATES["quat"]
+      - name: net_length
+        input: STATES["cur_length"]
         layers: [128, 128, 64]
         activations: elu
       - name: net
-        input: concatenate([features_extractor, net_pos, net_quat])
+        input: concatenate([features_extractor,net_length])
         layers: [512, 256, 128]
         activations: elu
     output: ACTIONS
@@ -39,23 +35,19 @@ models:
     clip_actions: False
     network:
       - name: features_extractor
-        input: STATES["image"]  # PyTorch NHWC -> NCHW
+        input: STATES["reconstruction"]  # PyTorch NHWC -> NCHW
         layers:
           - conv2d: {out_channels: 32, kernel_size: 8, stride: 2, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 3, stride: 1, padding: 0}
           - flatten
         activations: relu
-      - name: net_pos
-        input: STATES["pos"]
-        layers: [128, 128, 64]
-        activations: elu
-      - name: net_quat
-        input: STATES["quat"]
+      - name: net_length
+        input: STATES["cur_length"]
         layers: [128, 128, 64]
         activations: elu
       - name: net
-        input: concatenate([features_extractor, net_pos, net_quat])
+        input: concatenate([features_extractor, net_length])
         layers: [512, 256, 128]
         activations: elu
     output: ONE
@@ -77,7 +69,7 @@ agent:
   mini_batches: 4
   discount_factor: 0.99
   lambda: 0.95
-  learning_rate: 1.0e-04
+  learning_rate: 3.0e-04
   learning_rate_scheduler: KLAdaptiveLR
   learning_rate_scheduler_kwargs:
     kl_threshold: 0.008
@@ -98,7 +90,7 @@ agent:
   time_limit_bootstrap: False
   # logging and checkpoint
   experiment:
-    directory: "no_loop/surgery_insertion_50_cost_insert_10_nstep_16_bs_4_epoch_5_US_return_rew_ES_20"
+    directory: "reconstruction_first"
     experiment_name: ""
     write_interval: auto
     checkpoint_interval: auto

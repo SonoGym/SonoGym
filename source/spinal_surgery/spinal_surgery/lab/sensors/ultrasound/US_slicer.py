@@ -39,6 +39,10 @@ class USSlicer(LabelImgSlicer):
         self.us_cfg = us_cfg
         self.if_use_ct = if_use_ct
 
+        for i in range(self.n_human_types):
+            for key, value in label_convert_map.items():
+                self.label_maps[i][self.label_maps[i] == key] = value
+
         # construct random maps
         self.construct_T_maps()
         self.construct_Vl_maps()
