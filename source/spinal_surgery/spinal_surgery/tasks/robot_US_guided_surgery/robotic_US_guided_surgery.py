@@ -531,8 +531,9 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
             torch.abs(self.last_tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
             - torch.abs(self.tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
         )
+        # to avoid loop
         self.total_insertion[safe_close] += (
-            torch.abs(self.last_tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
+            torch.abs(self.last_traj_pos_along_traj_safe_close[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
             - torch.abs(self.tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
         )
 
@@ -559,12 +560,12 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
 
         cost[last_safe_close_now_unsafe] = self.total_insertion[last_safe_close_now_unsafe]
 
-        reward[safe_close] += self.w_pos * (self.last_tip_to_traj_dist[safe_close] - self.tip_to_traj_dist[safe_close])
-        reward[safe_close] += self.w_angle * (self.last_traj_to_tip_sin[safe_close] - self.traj_to_tip_sin[safe_close])
-        reward[free_region] += self.w_pos * (self.last_tip_to_traj_dist[free_region] - self.tip_to_traj_dist[free_region])
-        reward[free_region] += self.w_angle * (self.last_traj_to_tip_sin[free_region] - self.traj_to_tip_sin[free_region])
-        # reward += self.w_pos * (self.last_tip_to_traj_dist - self.tip_to_traj_dist)
-        # reward += self.w_angle * (self.last_traj_to_tip_sin - self.traj_to_tip_sin)
+        # reward[safe_close] += self.w_pos * (self.last_tip_to_traj_dist[safe_close] - self.tip_to_traj_dist[safe_close])
+        # reward[safe_close] += self.w_angle * (self.last_traj_to_tip_sin[safe_close] - self.traj_to_tip_sin[safe_close])
+        # reward[free_region] += self.w_pos * (self.last_tip_to_traj_dist[free_region] - self.tip_to_traj_dist[free_region])
+        # reward[free_region] += self.w_angle * (self.last_traj_to_tip_sin[free_region] - self.traj_to_tip_sin[free_region])
+        reward += self.w_pos * (self.last_tip_to_traj_dist - self.tip_to_traj_dist)
+        reward += self.w_angle * (self.last_traj_to_tip_sin - self.traj_to_tip_sin)
         # reward -= cost * self.w_cost
         reward -= cost * self.w_cost
 
@@ -573,6 +574,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.last_traj_to_tip_sin = copy.deepcopy(self.traj_to_tip_sin)
         self.last_unsafe = copy.deepcopy(unsafe)
         self.last_safe_close = copy.deepcopy(safe_close)
+        self.last_traj_pos_along_traj_safe_close[safe_close] = self.tip_pos_along_traj[safe_close]
 
         # print('free_region', free_region)
         # print('last_tip_pos_along_traj', self.last_tip_pos_along_traj)
@@ -591,7 +593,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.total_rewards += reward
         self.total_costs += cost
 
-        print('total_rewards', self.total_rewards)
+        # print('total_reward', self.total_rewards)
         # print('total_costs', self.total_costs)
         # TODO: update cost for safe learning
         self.extras['cost'] = unsafe.to(torch.float32)
@@ -755,6 +757,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.last_unsafe = torch.zeros(self.scene.num_envs, device=self.sim.device)
         self.last_safe_close = torch.zeros(self.scene.num_envs, device=self.sim.device)
         self.total_insertion = torch.zeros(self.scene.num_envs, device=self.sim.device)
+        self.last_traj_pos_along_traj_safe_close = torch.zeros(self.scene.num_envs, device=self.sim.device)
 
         self.total_rewards = torch.zeros(self.scene.num_envs, device=self.sim.device)
         self.total_costs = torch.zeros(self.scene.num_envs, device=self.sim.device)

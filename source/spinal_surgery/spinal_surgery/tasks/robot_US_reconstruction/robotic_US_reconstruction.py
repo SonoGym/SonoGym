@@ -561,6 +561,19 @@ class roboticUSRecEnv(DirectRLEnv):
         # reset the surface reconstructor
         self.surface_reconstructor.reset()
 
+    def check_nan(self):
+        if torch.isnan(self.US_ee_pos_b).any() or torch.isnan(self.US_ee_quat_b).any():
+            print('US_ee_pos_b', self.US_ee_pos_b)
+            print('US_ee_quat_b', self.US_ee_quat_b)
+            raise ValueError('nan value detected')
+        if torch.isnan(self.surface_reconstructor.incremental_cov).any():
+            print('incremental cov', self.surface_reconstructor.incremental_cov)
+            raise ValueError('nan value detected')
+        if torch.isnan(self.surface_reconstructor.cur_cov).any():
+            print('cur cov', self.surface_reconstructor.cur_cov)
+            raise ValueError('nan value detected')
+        
+
 
 
 
