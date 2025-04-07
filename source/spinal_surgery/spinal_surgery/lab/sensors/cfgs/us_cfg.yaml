@@ -35,8 +35,8 @@ system_params:
   noise_s0: 0.0
   noise_f: 300
 surface_to_label_map: {'skin': 12, 'muscle': 8, 'bone': 13}
-image_size: [150, 200]
+image_size: [150, 200] # [150, 200]
 image_3D_thickness: 100
-resolution: 0.0004
+resolution: 0.0004 # 0.0004
 kernel_size: [11, 11]
 E_S_ratio: 20 # 15

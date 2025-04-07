@@ -533,7 +533,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         )
         # to avoid loop
         self.total_insertion[safe_close] += (
-            torch.abs(self.last_traj_pos_along_traj_safe_close[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
+            torch.abs(self.last_tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
             - torch.abs(self.tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
         )
 
@@ -594,6 +594,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.total_costs += cost
 
         # print('total_reward', self.total_rewards)
+        # print('safe_close', safe_close)
         # print('total_costs', self.total_costs)
         # TODO: update cost for safe learning
         self.extras['cost'] = unsafe.to(torch.float32)

@@ -42,14 +42,14 @@ class LabelImgSlicer(SurfaceMotionPlanner):
         self.height_img = height_img
 
         # TODO: add CT maps
-        self.ct_maps = [torch.tensor(ct_map, dtype=torch.uint8, device=device) for ct_map in ct_maps]
+        self.ct_maps = [torch.tensor(ct_map, dtype=torch.int32, device=device) for ct_map in ct_maps]
 
         # construct images
         self.label_img_tensor = torch.zeros((self.num_envs, self.img_size[0], self.img_size[1], self.img_thickness), 
                                             dtype=torch.uint8, 
                                             device=self.device) # (num_envs, w, h)
         self.ct_img_tensor = torch.zeros((self.num_envs, self.img_size[0], self.img_size[1], self.img_thickness), 
-                                            dtype=torch.uint8, 
+                                            dtype=torch.int32, 
                                             device=self.device) # (num_envs, w, h)
 
         # construct grids
@@ -180,7 +180,7 @@ class LabelImgSlicer(SurfaceMotionPlanner):
 
             cv2.imshow("Label Image Update", combined_img_np.T / np.max(combined_img_np))
             cv2.waitKey(1)
-        elif key=='CT' or key=='US':
+        if key=='CT' or key=='US':
 
             combined_ct = self.ct_img_tensor[:first_n, :, :, 0].reshape((first_n * self.img_size[0], self.img_size[1])) # (w * first_n, h)
 
@@ -188,7 +188,5 @@ class LabelImgSlicer(SurfaceMotionPlanner):
 
             cv2.imshow("Ct Image Update", combined_ct_np.T / np.max(combined_ct_np))
             cv2.waitKey(1)
-        else:
-            raise ValueError('Invalid visualization key')
 
         return

@@ -19,7 +19,7 @@ motion_planning:
 
 observation: 
   3D: False
-  mode: 'CT' # 'seg', 'CT', 'US'
+  mode: 'US' # 'seg', 'CT', 'US'
   scale: 0.1 # 0.1, 0.0005, 0.003
 action: 
   mode: 'continuous' # 'discrete', 'continuous'
@@ -32,5 +32,6 @@ sim:
   patient_xz_init_range: [[100, 70, 1.5], [180, 200, 3.5]]
   if_use_ct: True
   ct_range: [-300, 3000]
+  us: 'net' # 'conv', 'net'
   vis_us: True
   vis_seg_map: False

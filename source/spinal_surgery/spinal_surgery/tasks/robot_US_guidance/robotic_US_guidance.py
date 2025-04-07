@@ -145,7 +145,9 @@ class roboticUSEnv(DirectRLEnv):
         label_convert_map = YAML().load(open(f"{PACKAGE_DIR}/lab/sensors/cfgs/label_conversion.yaml", 'r'))
 
         # construct US simulator
+        
         us_cfg = YAML().load(open(f"{PACKAGE_DIR}/lab/sensors/cfgs/us_cfg.yaml", 'r'))
+        us_generative_cfg = YAML().load(open(f"{PACKAGE_DIR}/lab/sensors/cfgs/us_generative_cfg.yaml", 'r'))
         self.sim_cfg = scene_cfg['sim']
         self.init_cmd_pose_min = torch.tensor(self.sim_cfg['patient_xz_init_range'][0], device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
         self.init_cmd_pose_max = torch.tensor(self.sim_cfg['patient_xz_init_range'][1], device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
@@ -168,6 +170,8 @@ class roboticUSEnv(DirectRLEnv):
             us_cfg['resolution'],
             img_thickness=img_thickness,
             visualize=self.sim_cfg['vis_seg_map'],
+            sim_mode=scene_cfg['sim']['us'],
+            us_generative_cfg=us_generative_cfg,
         )
         self.US_slicer.current_x_z_x_angle_cmd = (self.init_cmd_pose_min + self.init_cmd_pose_max) / 2
 

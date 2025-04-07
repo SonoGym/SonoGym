@@ -21,20 +21,20 @@ motion_planning:
   
 
 reconstruction:
-  img_size: [60, 80]
+  img_size: [50, 60]
   img_res: 0.001
   target_vertebra: 'vertebrae_L4'
   volume_size: [40, 40, 40]
-  volume_res: 0.0025
+  volume_res: 0.003
   missing_rate: 0.2
   max_roll_adj: 0.4
-  add_height: 0.03
+  add_height: 0.0
 
 reward:
   incremental_cov: 0.01
   action_length:
-    w_pos: 0.0001
-    w_angle: 0.001
+    w_pos: 0.001
+    w_angle: 0.01
 
 action: 
   scale: [2, 2, 0.1, 0.1]
