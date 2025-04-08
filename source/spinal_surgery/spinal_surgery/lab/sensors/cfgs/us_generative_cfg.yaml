@@ -3,7 +3,7 @@ model_path: /home/yunkao/git/IsaacLabExtensionTemplate/models/pix2pix.pth
 label_res: 0.0015
 
 CT: # CT cfgs to convert current HU CT inputs to network inputs
-  range: [0, 128] # [-2000, 3100] intensity range
+  range: [0, 150] # [-2000, 3100] intensity range
   res: 0.0015 # m
   size: [256, 256] # pixel size
 

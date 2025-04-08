@@ -41,7 +41,7 @@ reward:
   safe_height: 0.10 # 10 cm
   w_pos: 10.0
   w_insertion: 100.0
-  w_angle: 10.0
+  w_angle: 1.0
   w_cost: 20
 
 
@@ -52,5 +52,5 @@ sim:
   if_use_ct: True
   us: 'conv'
   ct_range: [-300, 3000]
-  vis_us: False
+  vis_us: True
   vis_seg_map: False

@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 class MultiInputNN(nn.Module):
-    def __init__(self, output_dim):
+    def __init__(self, output_dim=128):
         super(MultiInputNN, self).__init__()
         
         # CNN for image processing
@@ -47,7 +47,10 @@ class MultiInputNN(nn.Module):
         )
         
     def forward(self, x, state=None):
-        image, pos, quat = x['image'], x['pos'], x['quat']
+        image, pos, quat = x['policy']['image'].float(), x['policy']['pos'], x['policy']['quat']
+        # image = image[0,...]
+        # pos = pos[0,...]
+        # quat = quat[0,...]
         
         # Process image
         img_features = self.cnn(image)
@@ -63,6 +66,7 @@ class MultiInputNN(nn.Module):
         
         # Final processing
         output = self.fc_final(combined)
+        # output = output.unsqueeze(0)
         
         return output, state
     

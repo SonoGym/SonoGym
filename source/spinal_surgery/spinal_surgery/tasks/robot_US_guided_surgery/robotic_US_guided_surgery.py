@@ -552,11 +552,11 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
             self.last_safe_close,
             unsafe
         )
-        last_unsafe_now_safe_close = torch.logical_and(
-            unsafe,
-            safe_close
-        )
-        reward[last_unsafe_now_safe_close] += self.w_cost * 0.9 * self.total_insertion[last_unsafe_now_safe_close]
+        # last_unsafe_now_safe_close = torch.logical_and(
+        #     unsafe,
+        #     safe_close
+        # )
+        # reward[last_unsafe_now_safe_close] += self.w_cost * 0.9 * self.total_insertion[last_unsafe_now_safe_close]
 
         cost[last_safe_close_now_unsafe] = self.total_insertion[last_safe_close_now_unsafe]
 
@@ -565,7 +565,9 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         # reward[free_region] += self.w_pos * (self.last_tip_to_traj_dist[free_region] - self.tip_to_traj_dist[free_region])
         # reward[free_region] += self.w_angle * (self.last_traj_to_tip_sin[free_region] - self.traj_to_tip_sin[free_region])
         reward += self.w_pos * (self.last_tip_to_traj_dist - self.tip_to_traj_dist)
-        reward += self.w_angle * (self.last_traj_to_tip_sin - self.traj_to_tip_sin)
+        reward += self.w_angle * (torch.abs(self.last_traj_to_tip_sin) - torch.abs(self.traj_to_tip_sin))
+        # print('traj_to_tip_sin', self.traj_to_tip_sin)
+        # print('last_traj_to_tip_sin', self.last_traj_to_tip_sin)
         # reward -= cost * self.w_cost
         reward -= cost * self.w_cost
 
@@ -574,7 +576,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.last_traj_to_tip_sin = copy.deepcopy(self.traj_to_tip_sin)
         self.last_unsafe = copy.deepcopy(unsafe)
         self.last_safe_close = copy.deepcopy(safe_close)
-        self.last_traj_pos_along_traj_safe_close[safe_close] = self.tip_pos_along_traj[safe_close]
+        # self.last_traj_pos_along_traj_safe_close[safe_close] = self.tip_pos_along_traj[safe_close]
 
         # print('free_region', free_region)
         # print('last_tip_pos_along_traj', self.last_tip_pos_along_traj)

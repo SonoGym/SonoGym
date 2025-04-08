@@ -203,6 +203,11 @@ class SurfaceReconstructor(LabelImgSlicer):
             torch.ones_like(human_edge_coords, device=self.device),
             max=self.volume_size.reshape((1, -1)).repeat(human_edge_coords.shape[0], 1) - 2 
         ) # leave 0 for the outer boundary, then US rec volume will have no weird padding
+
+        # only take above half
+        above_half = human_edge_coords[:, 1] < self.volume_size[2] // 2
+        human_edge_coords = human_edge_coords[above_half, :] # (K_N, 3)
+        env_labels = env_labels[above_half, :] # (K_N, 1)
         
         if human_edge_pos.shape[1]== 0:
             return

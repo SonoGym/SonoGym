@@ -21,7 +21,7 @@ motion_planning:
   
 
 reconstruction:
-  img_size: [50, 60]
+  img_size: [50, 80]
   img_res: 0.001
   target_vertebra: 'vertebrae_L4'
   volume_size: [40, 40, 40]
@@ -46,6 +46,6 @@ sim:
   patient_xz_init_range: [[100, 70, 1.5], [180, 200, 3.5]]
   if_use_ct: True
   ct_range: [-300, 3000]
-  vis_us: False
-  vis_rec: False
+  vis_us: True
+  vis_rec: True
   vis_seg_map: False

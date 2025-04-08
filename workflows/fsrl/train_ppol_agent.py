@@ -9,7 +9,7 @@ parser = argparse.ArgumentParser(description="Train an RL agent with skrl.")
 parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
 parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
 parser.add_argument("--video_interval", type=int, default=2000, help="Interval between video recordings (in steps).")
-parser.add_argument("--num_envs", type=int, default=512, help="Number of environments to simulate.")
+parser.add_argument("--num_envs", type=int, default=256, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default='Isaac-robot-US-guided-surgery-v0', help="Name of the task.")
 parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
 parser.add_argument(
@@ -82,9 +82,17 @@ from fsrl.utils import TensorboardLogger, WandbLogger
 from fsrl.utils.exp_util import auto_name, seed_all
 from fsrl.utils.net.common import ActorCritic
 from isaaclab_rl.sb3 import Sb3VecEnvWrapper
+from isaaclab_tasks.utils.hydra import hydra_task_config
+from isaaclab.envs import (
+    DirectMARLEnv,
+    DirectMARLEnvCfg,
+    DirectRLEnvCfg,
+    ManagerBasedRLEnvCfg,
+    multi_agent_to_single_agent,
+)
 
 import spinal_surgery
-from spinal_surgery.tasks.robot_US_guided_surgery.agents.fsrl_ppol_cfg import RoboticUSGuidedSurgeryCfg
+# from spinal_surgery.tasks.robot_US_guided_surgery.agents.fsrl_ppol_cfg import RoboticUSGuidedSurgeryCfg
 from spinal_surgery.lab.feature_extractors.fsrl_multiinput_extractor import MultiInputNN, MultiInputActionNN
 
 TASK_TO_CFG = {
@@ -120,13 +128,14 @@ TASK_TO_CFG = {
     "SafetyWalker2dVelocityGymnasium-v1": Mujoco10MCfg,
     "SafetyAntVelocityGymnasium-v1": Mujoco10MCfg,
     "SafetyHumanoidVelocityGymnasium-v1": Mujoco20MCfg,
-    'Isaac-robot-US-guided-surgery-v0': RoboticUSGuidedSurgeryCfg
+    'Isaac-robot-US-guided-surgery-v0': TrainCfg
 }
 
 
-@pyrallis.wrap()
-def train(args: TrainCfg):
+@hydra_task_config(args_cli.task, "sb3_cfg_entry_point")
+def train(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: dict):
     # set seed and computing
+    args = TrainCfg()
     seed_all(args.seed)
     torch.set_num_threads(args.thread)
 
@@ -149,29 +158,33 @@ def train(args: TrainCfg):
 
     training_num = min(args.training_num, args.episode_per_collect)
     worker = eval(args.worker)
-    train_envs = worker([lambda: gym.make(args.task) for _ in range(training_num)])
-    test_envs = worker([lambda: gym.make(args.task) for _ in range(args.testing_num)])
-
+    # train_envs = worker([lambda: gym.make(args.task) for _ in range(training_num)])
+    # test_envs = worker([lambda: gym.make(args.task) for _ in range(args.testing_num)])
+    print('hydra_args:', hydra_args)
+    train_envs = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+    # test_envs = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+    # print('env length:', len(train_envs))
     # model
-    env = gym.make(args.task)
-    state_shape = env.observation_space.shape or env.observation_space.n
-    action_shape = env.action_space.shape or env.action_space.n
-    max_action = env.action_space.high[0]
+    # env = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+    state_shape = train_envs.observation_space.shape or train_envs.observation_space.n
+    action_shape = train_envs.action_space.shape or train_envs.action_space.n
+    max_action = train_envs.action_space.high[0]
 
-    net = MultiInputNN(output_dim = args.hidden_sizes).to(args.device)
+    net = MultiInputNN(output_dim = args.hidden_sizes[0]).to(args.device)
     actor = ActorProb(
         net,
         action_shape,
         max_action=max_action,
         unbounded=args.unbounded,
-        device=args.device
+        device=args.device,
+        preprocess_net_output_dim=args.hidden_sizes[0],
     ).to(args.device)
-    critic = [
-        Critic(
-            MultiInputNN(args.hidden_sizes).to(args.device),
-            device=args.device
-        ).to(args.device) for _ in range(2)
-    ]
+    critic = Critic(
+            MultiInputNN(args.hidden_sizes[0]).to(args.device),
+            device=args.device,
+            preprocess_net_output_dim=args.hidden_sizes[0],
+        ).to(args.device)
+    
 
     torch.nn.init.constant_(actor.sigma_param, -0.5)
     actor_critic = ActorCritic(actor, critic)
@@ -195,7 +208,7 @@ def train(args: TrainCfg):
     def dist(*logits):
         return Independent(Normal(*logits), 1)
 
-    env = Sb3VecEnvWrapper(env)
+    # train_envs = Sb3VecEnvWrapper(train_envs)
     
     policy = PPOLagrangian(
         actor,
@@ -222,8 +235,8 @@ def train(args: TrainCfg):
         deterministic_eval=args.deterministic_eval,
         action_scaling=args.action_scaling,
         action_bound_method=args.action_bound_method,
-        observation_space=env.observation_space,
-        action_space=env.action_space,
+        observation_space=train_envs.observation_space,
+        action_space=train_envs.action_space,
         lr_scheduler=None
     )
 
@@ -231,10 +244,10 @@ def train(args: TrainCfg):
     train_collector = FastCollector(
         policy,
         train_envs,
-        VectorReplayBuffer(args.buffer_size, len(train_envs)),
+        VectorReplayBuffer(args.buffer_size, args_cli.num_envs),
         exploration_noise=True,
     )
-    test_collector = FastCollector(policy, test_envs)
+    test_collector = None # FastCollector(policy, test_envs)
 
     def stop_fn(reward, cost):
         return reward > args.reward_threshold and cost < args.cost_limit
