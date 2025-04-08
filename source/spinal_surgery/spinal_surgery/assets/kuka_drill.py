@@ -13,10 +13,10 @@ The following configurations are available:
 Reference: https://github.com/frankaemika/franka_ros
 """
 
-import omni.isaac.orbit.sim as sim_utils
-from omni.isaac.orbit.actuators import ImplicitActuatorCfg
-from omni.isaac.orbit.assets.articulation import ArticulationCfg
-from omni.isaac.orbit_assets import ASSETS_DATA_DIR
+import isaaclab.sim as sim_utils
+from isaaclab.actuators import ImplicitActuatorCfg
+from isaaclab.assets import ArticulationCfg
+from spinal_surgery import ASSETS_DATA_DIR
 
 ##
 # Configuration

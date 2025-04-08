@@ -38,3 +38,6 @@ _build
 
 # data
 source/spinal_surgery/spinal_surgery/assets/data/*
+
+# models
+models/*

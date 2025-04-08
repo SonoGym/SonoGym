@@ -1,5 +1,6 @@
 from spinal_surgery.lab.sensors.ultrasound.label_img_slicer import LabelImgSlicer
 from spinal_surgery.lab.sensors.ultrasound.simulate_US_conv import USSimulatorConv
+from spinal_surgery.lab.sensors.ultrasound.simulate_US_network import USSimulatorNetwork
 import cv2
 import numpy as np
 import torch
@@ -10,10 +11,12 @@ class USSlicer(LabelImgSlicer):
     # Function: __init__
     # Function: slice_US
     # Function: update_plotter
-    def __init__(self, us_cfg, label_maps, ct_maps, if_use_ct, human_list, num_envs, x_z_range, init_x_z_x_angle, device, label_convert_map,
-                 img_size, img_res, img_thickness=1, label_res=0.0015, max_distance=0.03, # [m]
+    def __init__(self, us_cfg, label_maps, ct_maps, if_use_ct, human_list, num_envs, x_z_range, init_x_z_x_angle, 
+                 device, label_convert_map,
+                 img_size, img_res, img_thickness=1, roll_adj=0.0, label_res=0.0015, max_distance=0.03, # [m]
                  body_label=120, height = 0.13, height_img = 0.133,
-                 visualize=True, plane_axes={'h': [0, 0, 1], 'w': [1, 0, 0]}):
+                 visualize=True, plane_axes={'h': [0, 0, 1], 'w': [1, 0, 0]}, 
+                 sim_mode='conv', us_generative_cfg=None):
         '''
         label maps: list of label maps (3D volumes)
         num_envs: number of environments
@@ -31,12 +34,22 @@ class USSlicer(LabelImgSlicer):
         visualize: whether to visualize the human frame
         '''
         super().__init__(label_maps, ct_maps, human_list, num_envs, x_z_range, init_x_z_x_angle, device, label_convert_map,
-                 img_size, img_res, img_thickness, label_res, max_distance,
+                 img_size, img_res, img_thickness, roll_adj, label_res, max_distance,
                  body_label, height, height_img,
                  visualize, plane_axes)
-        self.us_sim = USSimulatorConv(us_cfg, device=device)
+        
+        self.sim_mode = sim_mode
+        if self.sim_mode=='conv':
+            self.us_sim = USSimulatorConv(us_cfg, device=device)
+        elif self.sim_mode=='net':
+            self.us_sim = USSimulatorNetwork(us_generative_cfg, device=device)
+
         self.us_cfg = us_cfg
         self.if_use_ct = if_use_ct
+
+        for i in range(self.n_human_types):
+            for key, value in label_convert_map.items():
+                self.label_maps[i][self.label_maps[i] == key] = value
 
         # construct random maps
         self.construct_T_maps()
@@ -184,23 +197,28 @@ class USSlicer(LabelImgSlicer):
 
     def slice_US(self, world_to_human_pos, world_to_human_quat, world_to_ee_pos, world_to_ee_quat):
         self.slice_label_img(world_to_human_pos, world_to_human_quat, world_to_ee_pos, world_to_ee_quat)
-        # self.us_img_tensor = self.us_sim.simulate_US_image(self.label_img_tensor.permute(0, 2, 1), False) # (n, H, W)
-        self.slice_rand_maps(world_to_human_pos, world_to_human_quat, world_to_ee_pos, world_to_ee_quat)
-        # reshape images for simulation
-        label_img_tensor = self.label_img_tensor.permute(0, 3, 2, 1).reshape((-1, self.img_size[1], self.img_size[0])) # (n*e, H, W)
-        T0_img_tensor = self.T0_T1_img_tensor[:, :, :, :, 0].permute(0, 3, 2, 1).reshape((-1, self.img_size[1], self.img_size[0])) # (n*e, H, W)
-        T1_img_tensor = self.T0_T1_img_tensor[:, :, :, :, 1].permute(0, 3, 2, 1).reshape((-1, self.img_size[1], self.img_size[0]))
-        l_img_size = self.us_cfg['large_scale_resolution']
-        Vl_img_tensor = self.Vl_img_tensor.permute(0, 3, 2, 1).reshape((-1, l_img_size, l_img_size)) # (n*l, l, l)
-        ct_img_tensor = self.ct_img_tensor.permute(0, 3, 2, 1).reshape((-1, self.img_size[1], self.img_size[0])) # (n*e, H, W)
-        self.us_img_tensor = self.us_sim.simulate_US_image_given_rand_map(
-            label_img_tensor, 
-            T0_img_tensor, 
-            T1_img_tensor, 
-            Vl_img_tensor, 
-            False,
-            self.if_use_ct,
-            ct_img_tensor) # (n*e, H, W)
+        
+        if self.sim_mode=='conv':
+            self.slice_rand_maps(world_to_human_pos, world_to_human_quat, world_to_ee_pos, world_to_ee_quat)
+            # reshape images for simulation
+            label_img_tensor = self.label_img_tensor.permute(0, 3, 2, 1).reshape((-1, self.img_size[1], self.img_size[0])) # (n*e, H, W)
+            T0_img_tensor = self.T0_T1_img_tensor[:, :, :, :, 0].permute(0, 3, 2, 1).reshape((-1, self.img_size[1], self.img_size[0])) # (n*e, H, W)
+            T1_img_tensor = self.T0_T1_img_tensor[:, :, :, :, 1].permute(0, 3, 2, 1).reshape((-1, self.img_size[1], self.img_size[0]))
+            l_img_size = self.us_cfg['large_scale_resolution']
+            Vl_img_tensor = self.Vl_img_tensor.permute(0, 3, 2, 1).reshape((-1, l_img_size, l_img_size)) # (n*l, l, l)
+            ct_img_tensor = self.ct_img_tensor.permute(0, 3, 2, 1).reshape((-1, self.img_size[1], self.img_size[0]))
+            
+            self.us_img_tensor = self.us_sim.simulate_US_image_given_rand_map(
+                label_img_tensor, 
+                T0_img_tensor, 
+                T1_img_tensor, 
+                Vl_img_tensor, 
+                False,
+                self.if_use_ct,
+                ct_img_tensor) # (n*e, H, W)
+        else:
+            ct_img_tensor = self.ct_img_tensor.permute(0, 3, 1, 2).reshape((-1, self.img_size[0], self.img_size[1])) # (n*e, W, H)
+            self.us_img_tensor = self.us_sim.simulate_US_image(ct_img_tensor.unsqueeze(1)).permute((0, 1, 3, 2)) # (n*e, 1, W, H)
         self.us_img_tensor = self.us_img_tensor.reshape((self.num_envs, -1, self.img_size[1], self.img_size[0])).permute(0, 2, 3, 1) # (n, H, W, e)
 
 
@@ -211,12 +229,14 @@ class USSlicer(LabelImgSlicer):
         if key=='US':
             first_n = min(first_n, self.num_envs)
 
-            combined_US_img = self.us_img_tensor[:first_n, :, 0, :].permute(0, 2, 1).reshape((-1, self.img_size[1])) # (w * first_n, h)
+            combined_US_img = self.us_img_tensor[:first_n, :, :, 0].permute(0, 2, 1).reshape((-1, self.img_size[1])) # (w * first_n, h)
 
             combined_img_np = combined_US_img.cpu().numpy()
 
-            cv2.imshow("US Image Update", combined_img_np.T / 20)
+            if self.sim_mode=='conv':
+                cv2.imshow("US Image Update", combined_img_np.T / 20)
+            else:
+                cv2.imshow("US Image Update", combined_img_np.T / np.max(combined_img_np))
             cv2.waitKey(1)
-        else:
-            raise ValueError(f"Invalid visualization key {key}.")
+        
 

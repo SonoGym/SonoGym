@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2024, The Isaac Lab Project Developers.
+# Copyright (c) 2022-2025, The Isaac Lab Project Developers.
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
@@ -23,9 +23,14 @@ parser.add_argument("--video_length", type=int, default=200, help="Length of the
 parser.add_argument(
     "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
 )
-parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
-parser.add_argument("--task", type=str, default=None, help="Name of the task.")
-parser.add_argument("--checkpoint", type=str, default=None, help="Path to model checkpoint.")
+parser.add_argument("--num_envs", type=int, default=2, help="Number of environments to simulate.")
+parser.add_argument("--task", type=str, default='Isaac-robot-US-guided-surgery-v0', help="Name of the task.")
+parser.add_argument("--checkpoint", type=str, default='/home/yunkao/git/IsaacLabExtensionTemplate/logs/skrl/surgery_insertion_50_cost_insert_10_nstep_16_bs_4_epoch_5_US_return_rew_ES_20/2025-04-07_00-09-58_ppo_torch/checkpoints/agent_450000.pt', help="Path to model checkpoint.")
+parser.add_argument(
+    "--use_pretrained_checkpoint",
+    action="store_true",
+    help="Use the pre-trained checkpoint from Nucleus.",
+)
 parser.add_argument(
     "--ml_framework",
     type=str,
@@ -37,9 +42,10 @@ parser.add_argument(
     "--algorithm",
     type=str,
     default="PPO",
-    choices=["PPO", "IPPO", "MAPPO"],
+    choices=["AMP", "PPO", "IPPO", "MAPPO"],
     help="The RL algorithm used for training the skrl agent.",
 )
+parser.add_argument("--real-time", action="store_true", default=False, help="Run in real-time, if possible.")
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -56,13 +62,14 @@ simulation_app = app_launcher.app
 
 import gymnasium as gym
 import os
+import time
 import torch
 
 import skrl
 from packaging import version
 
 # check for minimum supported skrl version
-SKRL_VERSION = "1.3.0"
+SKRL_VERSION = "1.4.1"
 if version.parse(skrl.__version__) < version.parse(SKRL_VERSION):
     skrl.logger.error(
         f"Unsupported skrl version: {skrl.__version__}. "
@@ -77,10 +84,14 @@ elif args_cli.ml_framework.startswith("jax"):
 
 from isaaclab.envs import DirectMARLEnv, multi_agent_to_single_agent
 from isaaclab.utils.dict import print_dict
+from isaaclab.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
+
+from isaaclab_rl.skrl import SkrlVecEnvWrapper
 
 import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils import get_checkpoint_path, load_cfg_from_registry, parse_env_cfg
-from isaaclab_tasks.utils.wrappers.skrl import SkrlVecEnvWrapper
+
+# PLACEHOLDER: Extension template (do not remove this comment)
 
 # config shortcuts
 algorithm = args_cli.algorithm.lower()
@@ -106,7 +117,12 @@ def main():
     log_root_path = os.path.abspath(log_root_path)
     print(f"[INFO] Loading experiment from directory: {log_root_path}")
     # get checkpoint path
-    if args_cli.checkpoint:
+    if args_cli.use_pretrained_checkpoint:
+        resume_path = get_published_pretrained_checkpoint("skrl", args_cli.task)
+        if not resume_path:
+            print("[INFO] Unfortunately a pre-trained checkpoint is currently unavailable for this task.")
+            return
+    elif args_cli.checkpoint:
         resume_path = os.path.abspath(args_cli.checkpoint)
     else:
         resume_path = get_checkpoint_path(
@@ -116,6 +132,17 @@ def main():
 
     # create isaac environment
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+
+    # convert to single-agent instance if required by the RL algorithm
+    if isinstance(env.unwrapped, DirectMARLEnv) and algorithm in ["ppo"]:
+        env = multi_agent_to_single_agent(env)
+
+    # get environment (physics) dt for real-time evaluation
+    try:
+        dt = env.physics_dt
+    except AttributeError:
+        dt = env.unwrapped.physics_dt
+
     # wrap for video recording
     if args_cli.video:
         video_kwargs = {
@@ -127,10 +154,6 @@ def main():
         print("[INFO] Recording videos during training.")
         print_dict(video_kwargs, nesting=4)
         env = gym.wrappers.RecordVideo(env, **video_kwargs)
-
-    # convert to single-agent instance if required by the RL algorithm
-    if isinstance(env.unwrapped, DirectMARLEnv) and algorithm in ["ppo"]:
-        env = multi_agent_to_single_agent(env)
 
     # wrap around environment for skrl
     env = SkrlVecEnvWrapper(env, ml_framework=args_cli.ml_framework)  # same as: `wrap_env(env, wrapper="auto")`
@@ -152,17 +175,30 @@ def main():
     timestep = 0
     # simulate environment
     while simulation_app.is_running():
+        start_time = time.time()
+
         # run everything in inference mode
         with torch.inference_mode():
             # agent stepping
-            actions = runner.agent.act(obs, timestep=0, timesteps=0)[0]
+            outputs = runner.agent.act(obs, timestep=0, timesteps=0)
+            # - multi-agent (deterministic) actions
+            if hasattr(env, "possible_agents"):
+                actions = {a: outputs[-1][a].get("mean_actions", outputs[0][a]) for a in env.possible_agents}
+            # - single-agent (deterministic) actions
+            else:
+                actions = outputs[-1].get("mean_actions", outputs[0])
             # env stepping
             obs, _, _, _, _ = env.step(actions)
         if args_cli.video:
             timestep += 1
-            # Exit the play loop after recording one video
+            # exit the play loop after recording one video
             if timestep == args_cli.video_length:
                 break
+
+        # time delay for real-time evaluation
+        sleep_time = dt - (time.time() - start_time)
+        if args_cli.real_time and sleep_time > 0:
+            time.sleep(sleep_time)
 
     # close the simulator
     env.close()

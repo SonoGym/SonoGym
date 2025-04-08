@@ -26,16 +26,16 @@ from spinal_surgery.assets.kuka_US import *
 from isaaclab.utils.math import subtract_frame_transforms, combine_frame_transforms, matrix_from_quat, quat_from_matrix
 from pxr import Gf, UsdGeom
 from scipy.spatial.transform import Rotation as R
-from spinal_surgery.lab.kinematics.human_frame_viewer import HumanFrameViewer
-from spinal_surgery.lab.kinematics.surface_motion_planner import SurfaceMotionPlanner
-from spinal_surgery.lab.sensors.ultrasound.label_img_slicer import LabelImgSlicer
-from spinal_surgery.lab.sensors.ultrasound.US_slicer import USSlicer
+from spinal_surgery.lab.sensors.surface_reconstructor import SurfaceReconstructor
+from spinal_surgery.lab.kinematics.vertebra_viewer import VertebraViewer
 from ruamel.yaml import YAML
 from spinal_surgery import PACKAGE_DIR
 from spinal_surgery.lab.kinematics.gt_motion_generator import GTMotionGenerator, GTDiscreteMotionGenerator
-import cProfile
 
-scene_cfg = YAML().load(open(f"{PACKAGE_DIR}/tasks/robot_US_guidance/cfgs/robotic_US_guidance.yaml", 'r'))
+import cProfile
+from gymnasium.spaces import Dict
+
+scene_cfg = YAML().load(open(f"{PACKAGE_DIR}/tasks/robot_US_reconstruction/cfgs/robotic_US_reconstruction.yaml", 'r'))
 
 # robot
 robot_cfg = scene_cfg['robot']
@@ -79,6 +79,12 @@ human_raw_list = [
             f"{ASSETS_DATA_DIR}/HumanModels/Totalsegmentator_dataset_v2_subset/" + p_id for p_id in patient_cfg['id_list']
 ]
 
+target_anatomy = scene_cfg['reconstruction']['target_vertebra']
+target_stl_file_list = [f"{ASSETS_DATA_DIR}/HumanModels/Totalsegmentator_dataset_v2_subset_stl/" + p_id + '/' + str(target_anatomy) + '.stl' 
+                        for p_id in patient_cfg['id_list']]
+target_traj_file_list = [f"{ASSETS_DATA_DIR}/HumanModels/Totalsegmentator_dataset_v2_subset_stl/" +
+                          p_id + '/' + 'standard_right_traj_' + str(target_anatomy)[-2:] + '.stl' for p_id in patient_cfg['id_list']]
+
 usd_file_list = [human_file + "/combined_wrapwrap/combined_wrapwrap.usd" for human_file in human_usd_list]
 label_map_file_list = [human_file + "/combined_label_map.nii.gz" for human_file in human_stl_list]
 ct_map_file_list = [human_file + "/ct.nii.gz" for human_file in human_raw_list]
@@ -90,15 +96,15 @@ scale = 1/label_res
 
 
 @configclass
-class roboticUSEnvCfg(DirectRLEnvCfg):
+class roboticUSRecEnvCfg(DirectRLEnvCfg):
     # env
     decimation = 2
-    episode_length_s = 5 # 300
+    episode_length_s = scene_cfg['sim']['episode_length'] # 300
     action_scale = 1 
-    action_space = 3
-    observation_space = [1, 150, 200]
+    action_space = 4
+    observation_space = list(scene_cfg['reconstruction']['volume_size']) # (40, 40, 40)
     state_space = 0
-    observation_scale = scene_cfg['observation']['scale']
+    # observation_scale = scene_cfg['observation']['scale']
 
     # simulation
     sim: sim_utils.SimulationCfg = sim_utils.SimulationCfg(dt=1 / 120, render_interval=decimation)
@@ -112,10 +118,10 @@ class roboticUSEnvCfg(DirectRLEnvCfg):
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=100, env_spacing=4.0, replicate_physics=False)
 
 
-class roboticUSEnv(DirectRLEnv):
-    cfg: roboticUSEnvCfg
+class roboticUSRecEnv(DirectRLEnv):
+    cfg: roboticUSRecEnvCfg
 
-    def __init__(self, cfg: roboticUSEnvCfg, render_mode: str | None = None, **kwargs):
+    def __init__(self, cfg: roboticUSRecEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
         self.robot_entity_cfg = SceneEntityCfg("robot_US", joint_names=["lbr_joint_.*"], body_names=["lbr_link_ee"])
@@ -145,73 +151,115 @@ class roboticUSEnv(DirectRLEnv):
         label_convert_map = YAML().load(open(f"{PACKAGE_DIR}/lab/sensors/cfgs/label_conversion.yaml", 'r'))
 
         # construct US simulator
-        
-        us_cfg = YAML().load(open(f"{PACKAGE_DIR}/lab/sensors/cfgs/us_cfg.yaml", 'r'))
-        us_generative_cfg = YAML().load(open(f"{PACKAGE_DIR}/lab/sensors/cfgs/us_generative_cfg.yaml", 'r'))
         self.sim_cfg = scene_cfg['sim']
-        self.init_cmd_pose_min = torch.tensor(self.sim_cfg['patient_xz_init_range'][0], device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
-        self.init_cmd_pose_max = torch.tensor(self.sim_cfg['patient_xz_init_range'][1], device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
-        if scene_cfg['observation']['3D']:
-            img_thickness = us_cfg['image_3D_thickness']
-        else:
-            img_thickness = 1
-        self.US_slicer = USSlicer(
-            us_cfg,
-            label_map_list, 
-            ct_map_list,
-            self.sim_cfg['if_use_ct'],
-            human_stl_list,
-            self.scene.num_envs, 
-            self.sim_cfg['patient_xz_range'], 
-            self.sim_cfg['patient_xz_init_range'][0], 
-            self.sim.device, 
-            label_convert_map,
-            us_cfg['image_size'], 
-            us_cfg['resolution'],
-            img_thickness=img_thickness,
-            visualize=self.sim_cfg['vis_seg_map'],
-            sim_mode=scene_cfg['sim']['us'],
-            us_generative_cfg=us_generative_cfg,
+
+        self.vertebra_viewer = VertebraViewer(
+            self.scene.num_envs,
+            len(human_usd_list),
+            target_stl_file_list,
+            target_traj_file_list,
+            self.sim_cfg['vis_us'],
+            label_res,
+            self.sim.device
         )
-        self.US_slicer.current_x_z_x_angle_cmd = (self.init_cmd_pose_min + self.init_cmd_pose_max) / 2
+
+        # construct surface reconstructor
+        self.surface_reconstructor = SurfaceReconstructor(
+            label_map_list,
+            ct_map_list,
+            human_stl_list,
+            self.scene.num_envs,
+            self.sim_cfg['patient_xz_range'], 
+            self.sim_cfg['patient_xz_init_range'][0],
+            self.sim.device,
+            label_convert_map,
+            scene_cfg['reconstruction']['volume_size'],
+            scene_cfg['reconstruction']['volume_res'],
+            self.vertebra_viewer.human_to_ver_per_envs_real,
+            target_vertebra_label=32-int(scene_cfg['reconstruction']['target_vertebra'][-1]),
+            missing_rate=scene_cfg['reconstruction']['missing_rate'],
+            add_height=scene_cfg['reconstruction']['add_height'],
+            target_vertebra_points=self.vertebra_viewer.vertebra_points_list,
+            max_roll_adj=scene_cfg['reconstruction']['max_roll_adj'],
+            img_size=scene_cfg['reconstruction']['img_size'], 
+            img_res=scene_cfg['reconstruction']['img_res'],
+            img_thickness=1,
+            visualize=self.sim_cfg['vis_rec']
+        )
+        self.surface_reconstructor.current_x_z_x_angle_cmd = torch.zeros((3,), device=self.sim.device)
 
         self.human_world_poses = self.human.data.root_state_w # these are already the initial poses
 
         # construct ground truth motion generator
-        motion_plan_cfg = scene_cfg['motion_planning']
         self.max_action = torch.tensor(scene_cfg['action']['max_action'], device=self.sim.device).reshape((1, -1))
-        self.goal_cmd_pose = torch.tensor(motion_plan_cfg['patient_xz_goal'], device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
-        self.gt_motion_generator = GTDiscreteMotionGenerator(
-            goal_cmd_pose=self.goal_cmd_pose,
-            scale=torch.tensor(motion_plan_cfg['scale'], device=self.sim.device),
-            num_envs=self.scene.num_envs,
-            surface_map_list=self.US_slicer.surface_map_list,
-            surface_normal_list=self.US_slicer.surface_normal_list,
-            label_res=label_res,
-            US_height=self.US_slicer.height,
-        )
         
         # change observation space to image 
         self.observation_space = gym.spaces.Box(
             low=0,
             high=255,
-            shape=(self.cfg.observation_space[0], self.cfg.observation_space[1], self.cfg.observation_space[2]),
+            shape=self.cfg.observation_space,
             dtype=np.uint8,
         )
 
-        self.cfg.observation_space[0] = self.US_slicer.img_thickness
+        # self.cfg.observation_space[0] = self.surface_reconstructor.img_thickness
 
-        self.single_observation_space['policy'] = gym.spaces.Box(
+        self.single_observation_space['policy'] = Dict({
+        'reconstruction': gym.spaces.Box(
             low=0,
             high=255,
             shape=(self.cfg.observation_space[0], self.cfg.observation_space[1], self.cfg.observation_space[2]),
             dtype=np.uint8,
-        )
+        ),
+        'cur_length': gym.spaces.Box(
+            low=-np.inf,
+            high=np.inf,
+            shape=(1,),
+            dtype=np.float32,
+        )})
 
         self.termination_direct = True
-        self.observation_mode = scene_cfg['observation']['mode']
-        self.action_mode = scene_cfg['action']['mode']
+        
         self.action_scale = torch.tensor(scene_cfg['action']['scale'], device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
+
+        # reward
+        self.rew_cfg = scene_cfg['reward']
+
+
+    def get_US_init_pose(self):
+        # compute position change
+        vertebra_to_US_2d_pos = torch.tensor(scene_cfg['motion_planning']['vertebra_to_US_2d_pos']).to(self.sim.device)
+        rand_disturbance = (
+            torch.rand((self.scene.num_envs, 2), device=self.sim.device) 
+            * 2 * scene_cfg['motion_planning']['vertebra_to_US_rand_max']
+            - scene_cfg['motion_planning']['vertebra_to_US_rand_max']
+        )
+        vertebra_2d_pos = self.vertebra_viewer.human_to_ver_per_envs[:, [0, 2]]
+        US_target_2d_pos = vertebra_2d_pos + vertebra_to_US_2d_pos.unsqueeze(0) + rand_disturbance
+
+        # change roll adj
+        rand_dist_angle = (
+            torch.rand((self.scene.num_envs, 1), device=self.sim.device) 
+            * 2 * scene_cfg['motion_planning']['US_roll_rand_max']
+            - scene_cfg['motion_planning']['US_roll_rand_max']
+        )
+        self.surface_reconstructor.roll_adj = (
+            scene_cfg['motion_planning']['US_roll_adj']
+            * torch.ones_like(vertebra_2d_pos[:, 0:1])
+            + rand_dist_angle
+        )
+
+        rand_dist_angle = (
+            torch.rand((self.scene.num_envs, 1), device=self.sim.device) 
+            * 2 * scene_cfg['motion_planning']['US_roll_rand_max']
+            - scene_cfg['motion_planning']['US_roll_rand_max']
+        )
+        US_target_2d_angle = 1.57 * torch.ones_like(vertebra_2d_pos[:, 0:1]) + rand_dist_angle
+
+        US_target_2d = torch.cat([US_target_2d_pos, US_target_2d_angle], dim=-1)
+
+        self.surface_reconstructor.current_x_z_x_angle_cmd = US_target_2d
+        world_to_ee_init_pos, world_to_ee_init_rot = self.surface_reconstructor.compute_world_ee_pose_from_cmd(
+            self.world_to_human_pos, self.world_to_human_rot)
 
 
     def _setup_scene(self):
@@ -286,6 +334,16 @@ class roboticUSEnv(DirectRLEnv):
         self.scene.rigid_objects["human"] = self.human
 
 
+    def get_action_length(self, actions: torch.Tensor):
+        # compute position and rotation
+        pos_l = torch.linalg.norm(actions[:, 0:2], dim=-1)
+        rot_l = torch.linalg.norm(actions[:, 2:], dim=-1)
+
+        total_l = self.rew_cfg['action_length']['w_pos'] * pos_l + self.rew_cfg['action_length']['w_angle'] * rot_l
+
+        return total_l
+
+
     def _get_observations(self) -> dict:
         # get human frame
         self.human_world_poses = self.human.data.body_link_state_w[:, 0, 0:7] # these are already the initial poses
@@ -294,52 +352,50 @@ class roboticUSEnv(DirectRLEnv):
         # get ee pose w
         self.US_ee_pose_w = self.robot.data.body_state_w[:, self.robot_entity_cfg.body_ids[-1], 0:7]
 
-        
-        if self.observation_mode == "US":
-            self.US_slicer.slice_US(self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7])
-            US_img = self.US_slicer.us_img_tensor.permute(0, 3, 1, 2) * self.cfg.observation_scale
-            observations = {"policy": US_img.to(torch.uint8)}
-        elif self.observation_mode == "CT":
-            self.US_slicer.slice_label_img(self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7])
-            CT_img = self.US_slicer.ct_img_tensor.permute(0, 3, 1, 2) * self.cfg.observation_scale
-            observations = {"policy": CT_img.to(torch.uint8)}
-        elif self.observation_mode == "seg":
-            self.US_slicer.slice_label_img(self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7])
-            label_img = self.US_slicer.label_img_tensor.permute(0, 3, 1, 2) * self.cfg.observation_scale
-            observations = {"policy": label_img.to(torch.uint8)}
-        else:
-            raise ValueError("Invalid observation mode")
+        # new reconstruction
+        self.surface_reconstructor.obtain_new_reconstruction_from_ee_pose(
+            self.world_to_human_pos, self.world_to_human_rot, 
+            self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
+        )
 
-        if self.sim_cfg['vis_us']:
-            self.US_slicer.visualize(self.observation_mode)
+        observations = {'policy':{
+            'reconstruction': self.surface_reconstructor.US_rec_volume,
+            'cur_length': self.total_length.reshape((-1, 1)),
+        }
+        }
+
+        if scene_cfg['sim']['vis_us']:
+            # get human frame
+            self.surface_reconstructor.visualize('seg')
+            self.vertebra_viewer.update_tip_vis(self.human_to_ee_pos, self.human_to_ee_quat)
 
         return observations
 
         
     def _pre_physics_step(self, actions: torch.Tensor) -> None:
+        '''
+        action: (num_envs, 4)
+        x, z, x_angle, y_angle, 
+        '''
         # if action is 6 dim (SE), convert to 3 dim (xz pos + y rot)
         if actions.shape[-1] == 6:
-            actions = actions[:, [0, 2, 5]]
+            actions = actions[:, [0, 2, 4, 5]]
+        
+        # clamp action
+        actions = torch.clamp(actions * self.action_scale, -self.max_action, self.max_action)
+        self.actions = actions
         # update the target command
-        # actions = torch.zeros_like(actions).to(self.sim.device)
-        # actions[:, 0] = 1
-        if self.action_mode=='continuous':
-            actions = torch.clamp(actions * self.action_scale, -self.max_action, self.max_action)
-        elif self.action_mode=='discrete':
-            actions = torch.sign(actions) * self.action_scale
-        else:
-            raise ValueError("Invalid action mode")
         # actions: dx, dz: in image frame
-        human_to_ee_pos, human_to_ee_quat = subtract_frame_transforms(
+        self.human_to_ee_pos, self.human_to_ee_quat = subtract_frame_transforms(
             self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
         )
-        human_to_ee_rot_mat = matrix_from_quat(human_to_ee_quat)
+        human_to_ee_rot_mat = matrix_from_quat(self.human_to_ee_quat)
         dx_dz_human = actions[:, 0].unsqueeze(1) * human_to_ee_rot_mat[:, :, 0] + actions[:, 1].unsqueeze(1) * human_to_ee_rot_mat[:, :, 1]
-        cmd = torch.cat([dx_dz_human[:, [0, 2]], actions[:, 2:3]], dim=-1)
-        self.US_slicer.update_cmd(cmd)
+        cmd = torch.cat([dx_dz_human[:, [0, 2]], actions[:, 2:4]], dim=-1)
+        self.surface_reconstructor.update_cmd(cmd)
 
         # compute desired world to ee pose
-        world_to_ee_target_pos, world_to_ee_target_rot = self.US_slicer.compute_world_ee_pose_from_cmd(
+        world_to_ee_target_pos, world_to_ee_target_rot = self.surface_reconstructor.compute_world_ee_pose_from_cmd(
             self.world_to_human_pos, self.world_to_human_rot)
         # compute desired base to ee pose
         world_to_base_pose = self.robot.data.root_link_state_w[:, 0:7]
@@ -373,27 +429,19 @@ class roboticUSEnv(DirectRLEnv):
         self.robot.set_joint_position_target(joint_pos_des, joint_ids=self.robot_entity_cfg.joint_ids)
 
     def _get_rewards(self) -> torch.Tensor:
-        # get current cmd pose
-        cur_human_ee_pos, cur_human_ee_quat = subtract_frame_transforms(
-            self.world_to_human_pos, self.world_to_human_rot, 
-            self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
-        )
-        cur_cmd_pose = self.gt_motion_generator.human_cmd_state_from_ee_pose(cur_human_ee_pos, cur_human_ee_quat)
-        # gt_cmd, gt_cmd_pose = self.gt_motion_generator.generate_gt_human_cmd(cur_cmd_pose)
-        # print(cur_cmd_pose)
+        reward = 0
+        # length of path
+        self.act_l = self.get_action_length(self.actions)
 
-        # add reward for getting closer to the target
-        cur_distance_to_goal = torch.norm(cur_cmd_pose[:, 0:2] - self.goal_cmd_pose[:, 0:2], dim=-1) * 0.001
-        cur_distance_to_goal += torch.norm(cur_cmd_pose[:, 2:3] - self.goal_cmd_pose[:, 2:3], dim=-1)
+        # current coverage
+        reward += self.rew_cfg['incremental_cov'] * self.surface_reconstructor.incremental_cov
+        reward -= self.act_l
 
-        reward = self.distance_to_goal - cur_distance_to_goal
-
-        self.distance_to_goal = cur_distance_to_goal
-
-        reward -= 0.001 * cur_distance_to_goal # faster to reach the goal
-
+        self.total_length += self.act_l
         self.total_reward += reward
         # print(self.total_reward)
+        # print(self.surface_reconstructor.cur_cov)
+        # print(self.total_length)
 
         return reward 
     
@@ -402,13 +450,14 @@ class roboticUSEnv(DirectRLEnv):
             time_out = self.episode_length_buf >= self.max_episode_length - 1
         else:
             time_out = torch.zeros_like(self.episode_length_buf)
-        out_of_bounds = torch.zeros_like(self.US_slicer.no_collide) # self.US_slicer.no_collide
+        out_of_bounds = torch.zeros_like(self.surface_reconstructor.no_collide) # self.US_slicer.no_collide
        
         return out_of_bounds, time_out
+
     
     def _move_towards_target(self, 
                              human_ee_target_pos: torch.Tensor, human_ee_target_quat: torch.Tensor,
-                             num_steps: int = 100):
+                             num_steps: int = 200):
         is_rendering = self.sim.has_gui() or self.sim.has_rtx_sensors()
 
         for _ in range(num_steps):
@@ -497,28 +546,33 @@ class roboticUSEnv(DirectRLEnv):
         self.world_to_base_pose = self.robot.data.root_link_state_w[:, 0:7]
 
         # compute 2d target poses
-        cmd_target_poses = torch.rand((self.scene.num_envs, 3), device=self.sim.device)
-        min_init = self.init_cmd_pose_min
-        max_init = self.init_cmd_pose_max
-        cmd_target_poses = cmd_target_poses * (max_init - min_init) + min_init
-        # compute 3d target poses
-        self.US_slicer.update_cmd(cmd_target_poses - self.US_slicer.current_x_z_x_angle_cmd)
-        world_to_ee_init_pos, world_to_ee_init_rot = self.US_slicer.compute_world_ee_pose_from_cmd(self.world_to_human_pos, self.world_to_human_rot)
+        self.get_US_init_pose()
         # compute joint positions
         # set joint positions
-        self._move_towards_target(self.US_slicer.human_to_ee_target_pos, self.US_slicer.human_to_ee_target_quat)
+        self._move_towards_target(self.surface_reconstructor.human_to_ee_target_pos, self.surface_reconstructor.human_to_ee_target_quat)
 
-        # init distance to goal
-        cur_human_ee_pos, cur_human_ee_quat = subtract_frame_transforms(
-            self.world_to_human_pos, self.world_to_human_rot, 
-            self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
+        # actions: dx, dz: in image frame
+        self.human_to_ee_pos, self.human_to_ee_quat = subtract_frame_transforms(
+            self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
         )
-        self.cur_cmd_pose = self.gt_motion_generator.human_cmd_state_from_ee_pose(cur_human_ee_pos, cur_human_ee_quat)
-        self.distance_to_goal = torch.norm(self.cur_cmd_pose[:, 0:2] - self.goal_cmd_pose[:, 0:2], dim=-1) * 0.001
-        self.distance_to_goal += torch.norm(self.cur_cmd_pose[:, 2:3] - self.goal_cmd_pose[:, 2:3], dim=-1)
-
         self.total_reward = torch.zeros(self.scene.num_envs, device=self.sim.device)
+        self.total_length = torch.zeros(self.scene.num_envs, device=self.sim.device)
 
+        # reset the surface reconstructor
+        self.surface_reconstructor.reset()
+
+    def check_nan(self):
+        if torch.isnan(self.US_ee_pos_b).any() or torch.isnan(self.US_ee_quat_b).any():
+            print('US_ee_pos_b', self.US_ee_pos_b)
+            print('US_ee_quat_b', self.US_ee_quat_b)
+            raise ValueError('nan value detected')
+        if torch.isnan(self.surface_reconstructor.incremental_cov).any():
+            print('incremental cov', self.surface_reconstructor.incremental_cov)
+            raise ValueError('nan value detected')
+        if torch.isnan(self.surface_reconstructor.cur_cov).any():
+            print('cur cov', self.surface_reconstructor.cur_cov)
+            raise ValueError('nan value detected')
+        
 
 
 

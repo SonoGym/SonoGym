@@ -49,7 +49,7 @@ import cProfile
 def pre_process_actions(delta_pose: torch.Tensor, gripper_command: bool) -> torch.Tensor:
     """Pre-process actions for the environment."""
     # compute actions based on environment
-    if "Reach" in args_cli.task or 'guidance' in args_cli.task:
+    if "Reach" in args_cli.task or 'guidance' in args_cli.task or 'surgery' in args_cli.task or 'US' in args_cli.task:
         # note: reach is the only one that uses a different action space
         # compute actions
         return delta_pose
@@ -111,7 +111,7 @@ def main():
 
     # simulate environment
     step = 0
-    while simulation_app.is_running() and step < 1000:
+    while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():
             step +=1 

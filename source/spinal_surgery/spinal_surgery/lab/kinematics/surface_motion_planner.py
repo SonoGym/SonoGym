@@ -64,7 +64,7 @@ class SurfaceMotionPlanner(HumanFrameViewer):
     # Class: surface motion planner
     # Function: __init__
     # Function: plan_motion
-    def __init__(self, label_maps, human_list, num_envs, x_z_range, init_x_z_x_angle, device, 
+    def __init__(self, label_maps, human_list, num_envs, x_z_range, init_x_z_x_angle, device, roll_adj=0.0, 
                  label_res=0.0015, body_label=120, height = 0.1, height_img = 0.1,
                  visualize=True, plane_axes={'h': [0, 0, 1], 'w': [1, 0, 0]}):
         '''
@@ -88,6 +88,7 @@ class SurfaceMotionPlanner(HumanFrameViewer):
         self.body_label = body_label
         self.height = height
         self.human_list = human_list
+        self.roll_adj = roll_adj * torch.ones((num_envs, 1), device=device)
 
         # construct surface map list X * Z: surface point at 2d postion
         self.surface_map_list = []
@@ -149,10 +150,10 @@ class SurfaceMotionPlanner(HumanFrameViewer):
         target_y_axis = torch.cross(self.target_z_axis, self.target_x_axis_proj, dim=-1) # (num_envs / n, 3)
         target_x_axis = torch.cross(target_y_axis, self.target_z_axis, dim=-1)
 
-        # rotation assign
+        # rotation assign # adjust roll
         self.target_rot_mat[:, :, 0] = target_x_axis
-        self.target_rot_mat[:, :, 1] = target_y_axis
-        self.target_rot_mat[:, :, 2] = self.target_z_axis
+        self.target_rot_mat[:, :, 1] = target_y_axis * torch.cos(self.roll_adj) + self.target_z_axis * torch.sin(self.roll_adj)
+        self.target_rot_mat[:, :, 2] = self.target_z_axis * torch.cos(self.roll_adj) - target_y_axis * torch.sin(self.roll_adj)
 
         target_rot_mat_wp = wp.from_torch(self.target_rot_mat, wp.mat33)
         wp.launch(
