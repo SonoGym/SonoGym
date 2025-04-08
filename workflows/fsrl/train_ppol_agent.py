@@ -9,7 +9,7 @@ parser = argparse.ArgumentParser(description="Train an RL agent with skrl.")
 parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
 parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
 parser.add_argument("--video_interval", type=int, default=2000, help="Interval between video recordings (in steps).")
-parser.add_argument("--num_envs", type=int, default=256, help="Number of environments to simulate.")
+parser.add_argument("--num_envs", type=int, default=64, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default='Isaac-robot-US-guided-surgery-v0', help="Name of the task.")
 parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
 parser.add_argument(
@@ -94,6 +94,7 @@ from isaaclab.envs import (
 import spinal_surgery
 # from spinal_surgery.tasks.robot_US_guided_surgery.agents.fsrl_ppol_cfg import RoboticUSGuidedSurgeryCfg
 from spinal_surgery.lab.feature_extractors.fsrl_multiinput_extractor import MultiInputNN, MultiInputActionNN
+from spinal_surgery.rl.fsrl_wrapper import FsrlEnvWrapper
 
 TASK_TO_CFG = {
     # bullet safety gym tasks
@@ -161,6 +162,9 @@ def train(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, age
     # train_envs = worker([lambda: gym.make(args.task) for _ in range(training_num)])
     # test_envs = worker([lambda: gym.make(args.task) for _ in range(args.testing_num)])
     print('hydra_args:', hydra_args)
+    env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
+    env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
+
     train_envs = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
     # test_envs = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
     # print('env length:', len(train_envs))
@@ -168,19 +172,23 @@ def train(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, age
     # env = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
     state_shape = train_envs.observation_space.shape or train_envs.observation_space.n
     action_shape = train_envs.action_space.shape or train_envs.action_space.n
-    max_action = train_envs.action_space.high[0]
+    max_action = train_envs.action_space.high[0, 0]
 
-    net = MultiInputNN(output_dim = args.hidden_sizes[0]).to(args.device)
+    net = MultiInputNN(
+        input_shape=train_envs.observation_space.shape,
+        output_dim = args.hidden_sizes[0]).to(args.device)
+    
     actor = ActorProb(
         net,
-        action_shape,
+        action_shape[1:],
         max_action=max_action,
         unbounded=args.unbounded,
         device=args.device,
         preprocess_net_output_dim=args.hidden_sizes[0],
     ).to(args.device)
+
     critic = Critic(
-            MultiInputNN(args.hidden_sizes[0]).to(args.device),
+            MultiInputNN(train_envs.observation_space.shape, args.hidden_sizes[0]).to(args.device),
             device=args.device,
             preprocess_net_output_dim=args.hidden_sizes[0],
         ).to(args.device)
@@ -208,7 +216,7 @@ def train(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, age
     def dist(*logits):
         return Independent(Normal(*logits), 1)
 
-    # train_envs = Sb3VecEnvWrapper(train_envs)
+    train_envs = FsrlEnvWrapper(train_envs)
     
     policy = PPOLagrangian(
         actor,

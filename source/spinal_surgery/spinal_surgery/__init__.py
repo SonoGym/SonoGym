@@ -7,6 +7,7 @@ import os
 
 from .lab import *
 from .tasks import *
+from .rl import *
 
 # Register UI extensions.
 from .ui_extension_example import *

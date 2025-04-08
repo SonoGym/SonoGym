@@ -42,7 +42,7 @@ import cProfile
 from gymnasium.spaces import Dict
 
 scene_cfg = YAML().load(open(f"{PACKAGE_DIR}/tasks/robot_US_guided_surgery/cfgs/robotic_US_guided_surgery.yaml", 'r'))
-
+us_cfg = YAML().load(open(f"{PACKAGE_DIR}/lab/sensors/cfgs/us_cfg.yaml", 'r'))
 # robot
 robot_cfg = scene_cfg['robot']
 INIT_STATE_ROBOT_US = ArticulationCfg.InitialStateCfg(
@@ -122,7 +122,8 @@ class roboticUSGuidedSurgeryCfg(DirectRLEnvCfg):
     episode_length_s = scene_cfg['sim']['episode_length'] # 5 # 300
     action_scale = 1 
     action_space = 6
-    observation_space = [1, 150 // scene_cfg['observation']['downsample'], 200 // scene_cfg['observation']['downsample']]
+    observation_space = [us_cfg['image_3D_thickness'] // scene_cfg['observation']['downsample'], 
+                         200 // scene_cfg['observation']['downsample'], 150 // scene_cfg['observation']['downsample']]
     state_space = 0
     observation_scale = scene_cfg['observation']['scale']
 
@@ -182,7 +183,6 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         label_convert_map = YAML().load(open(f"{PACKAGE_DIR}/lab/sensors/cfgs/label_conversion.yaml", 'r'))
 
         # construct US simulator
-        us_cfg = YAML().load(open(f"{PACKAGE_DIR}/lab/sensors/cfgs/us_cfg.yaml", 'r'))
         self.sim_cfg = scene_cfg['sim']
         self.init_cmd_pose_min = torch.tensor(self.sim_cfg['patient_xz_init_range'][0], device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
         self.init_cmd_pose_max = torch.tensor(self.sim_cfg['patient_xz_init_range'][1], device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)

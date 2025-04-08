@@ -2,12 +2,12 @@ import torch
 from torch import nn
 
 class MultiInputNN(nn.Module):
-    def __init__(self, output_dim=128):
+    def __init__(self, input_shape, output_dim=128):
         super(MultiInputNN, self).__init__()
         
         # CNN for image processing
         self.cnn = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=8, stride=2),
+            nn.Conv2d(input_shape[1], 32, kernel_size=8, stride=2),
             nn.ReLU(),
             nn.Conv2d(32, 64, kernel_size=4, stride=2),
             nn.ReLU(),
@@ -16,10 +16,7 @@ class MultiInputNN(nn.Module):
         )
         
         # Fully connected layer for image features
-        self.fc_image = nn.Sequential(
-            nn.Linear(64 * 6 * 6, 512),  # Assuming final feature map size is 6x6
-            nn.ReLU()
-        )
+        self.fc_image = None
         
         # FNN for pos
         self.fc_pos = nn.Sequential(
@@ -45,9 +42,15 @@ class MultiInputNN(nn.Module):
             nn.ReLU(),
             nn.Linear(256, output_dim)
         )
+
+        self.device = None
         
     def forward(self, x, state=None):
-        image, pos, quat = x['policy']['image'].float(), x['policy']['pos'], x['policy']['quat']
+        if self.device is None:
+            self.device = next(self.parameters()).device
+        image = torch.tensor(x['image']).to(torch.float32).to(self.device)
+        pos = torch.tensor(x['pos']).to(torch.float32).to(self.device)
+        quat = torch.tensor(x['quat']).to(torch.float32).to(self.device)
         # image = image[0,...]
         # pos = pos[0,...]
         # quat = quat[0,...]
@@ -55,6 +58,11 @@ class MultiInputNN(nn.Module):
         # Process image
         img_features = self.cnn(image)
         img_features = torch.flatten(img_features, start_dim=1)
+        if self.fc_image is None:
+            self.fc_image = nn.Sequential(
+                nn.Linear(img_features.shape[1], 512),  # lazy initialization
+                nn.ReLU()
+            ).to(img_features.device)
         img_features = self.fc_image(img_features)
         
         # Process pos and quat
