@@ -502,6 +502,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
     def _get_rewards(self) -> torch.Tensor:
 
         reward = torch.zeros(self.scene.num_envs, device=self.sim.device)
+        penalty = torch.zeros(self.scene.num_envs, device=self.sim.device)
         cost = torch.zeros(self.scene.num_envs, device=self.sim.device)
 
         if self.sim_cfg['vis_us']:
@@ -558,7 +559,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         # )
         # reward[last_unsafe_now_safe_close] += self.w_cost * 0.9 * self.total_insertion[last_unsafe_now_safe_close]
 
-        cost[last_safe_close_now_unsafe] = self.total_insertion[last_safe_close_now_unsafe]
+        penalty[last_safe_close_now_unsafe] = self.total_insertion[last_safe_close_now_unsafe]
 
         # reward[safe_close] += self.w_pos * (self.last_tip_to_traj_dist[safe_close] - self.tip_to_traj_dist[safe_close])
         # reward[safe_close] += self.w_angle * (self.last_traj_to_tip_sin[safe_close] - self.traj_to_tip_sin[safe_close])
@@ -568,8 +569,8 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         reward += self.w_angle * (torch.abs(self.last_traj_to_tip_sin) - torch.abs(self.traj_to_tip_sin))
         # print('traj_to_tip_sin', self.traj_to_tip_sin)
         # print('last_traj_to_tip_sin', self.last_traj_to_tip_sin)
-        # reward -= cost * self.w_cost
-        reward -= cost * self.w_cost
+        # reward -= penalty * self.w_penalty
+        reward -= penalty * self.w_cost
 
         self.last_tip_pos_along_traj = copy.deepcopy(self.tip_pos_along_traj)
         self.last_tip_to_traj_dist = copy.deepcopy(self.tip_to_traj_dist)

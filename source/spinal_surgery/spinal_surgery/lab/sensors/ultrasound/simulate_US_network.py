@@ -36,10 +36,25 @@ class USSimulatorNetwork:
         with torch.no_grad():
 
             # intensity scale: [-1, 1]
+            print('ct', torch.min(ct_img_tensor), torch.max(ct_img_tensor))
             ct = torch.clamp(ct_img_tensor, self.CT_cfg["range"][0], self.CT_cfg["range"][1])
-            ct = (ct - self.CT_cfg["range"][0]) / (self.CT_cfg["range"][1] - self.CT_cfg["range"][0]) * 2 - 1
+            ct = (ct - self.CT_cfg["range"][0]) / (self.CT_cfg["range"][1] - self.CT_cfg["range"][0]) # * 2 - 1
 
             # spatial resolution
+            ct = F.interpolate(
+                ct,
+                size=(self.image_size[0], self.image_size[1]),
+                mode="nearest-exact",
+                # align_corners=False,
+            )
+
+            # down sample and upsample it
+            ct = F.interpolate(
+                ct,
+                size=(self.image_size[0] // 4, self.image_size[1] // 4),
+                mode="nearest-exact",
+                # align_corners=False,
+            )
             ct = F.interpolate(
                 ct,
                 size=(self.image_size[0], self.image_size[1]),

@@ -62,7 +62,7 @@ import torch
 from tianshou.data import VectorReplayBuffer
 from tianshou.env import BaseVectorEnv, ShmemVectorEnv, SubprocVectorEnv
 from tianshou.utils.net.common import Net
-from tianshou.utils.net.continuous import ActorProb, Critic
+from tianshou.utils.net.continuous import ActorProb
 from torch.distributions import Independent, Normal
 
 from fsrl.config.ppol_cfg import (
@@ -93,8 +93,9 @@ from isaaclab.envs import (
 
 import spinal_surgery
 # from spinal_surgery.tasks.robot_US_guided_surgery.agents.fsrl_ppol_cfg import RoboticUSGuidedSurgeryCfg
-from spinal_surgery.lab.feature_extractors.fsrl_multiinput_extractor import MultiInputNN, MultiInputActionNN
-from spinal_surgery.rl.fsrl_wrapper import FsrlEnvWrapper
+from spinal_surgery.lab.feature_extractors.fsrl_multiinput_extractor import MultiInputNN
+from spinal_surgery.rl.fsrl_wrapper import FsrlEnvWrapper, load_config_from_yaml
+from spinal_surgery.lab.agents.fsrl_critic import Critic
 
 TASK_TO_CFG = {
     # bullet safety gym tasks
@@ -133,10 +134,12 @@ TASK_TO_CFG = {
 }
 
 
-@hydra_task_config(args_cli.task, "sb3_cfg_entry_point")
+@hydra_task_config(args_cli.task, "fsrl_cfg_entry_point")
 def train(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: dict):
     # set seed and computing
-    args = TrainCfg()
+    # args = TrainCfg()
+    args = load_config_from_yaml(agent_cfg, TrainCfg)
+    
     seed_all(args.seed)
     torch.set_num_threads(args.thread)
 

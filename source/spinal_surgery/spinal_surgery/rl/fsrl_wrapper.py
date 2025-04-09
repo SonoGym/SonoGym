@@ -16,6 +16,20 @@ from isaaclab.envs import (
     ManagerBasedRLEnvCfg,
     multi_agent_to_single_agent,
 )
+from dataclasses import dataclass, fields
+from typing import Tuple, Optional, Type
+from ruamel.yaml import YAML
+
+def load_config_from_yaml(raw_cfg, config_class: Type) -> object:
+
+    # Auto-convert types where needed (e.g., list to tuple)
+    field_types = {f.name: f.type for f in fields(config_class)}
+    for k, v in raw_cfg.items():
+        expected_type = field_types.get(k)
+        if expected_type == Tuple[int, ...] and isinstance(v, list):
+            raw_cfg[k] = tuple(v)
+
+    return config_class(**raw_cfg)
 
 
 class FsrlEnvWrapper(gym.Env):

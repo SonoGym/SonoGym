@@ -14,7 +14,7 @@ class USSlicer(LabelImgSlicer):
     def __init__(self, us_cfg, label_maps, ct_maps, if_use_ct, human_list, num_envs, x_z_range, init_x_z_x_angle, 
                  device, label_convert_map,
                  img_size, img_res, img_thickness=1, roll_adj=0.0, label_res=0.0015, max_distance=0.03, # [m]
-                 body_label=120, height = 0.13, height_img = 0.133,
+                 body_label=120, height = 0.13, height_img = 0.13, # 0.133
                  visualize=True, plane_axes={'h': [0, 0, 1], 'w': [1, 0, 0]}, 
                  sim_mode='conv', us_generative_cfg=None):
         '''
