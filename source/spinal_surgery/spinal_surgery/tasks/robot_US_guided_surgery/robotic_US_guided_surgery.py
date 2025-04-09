@@ -27,7 +27,7 @@ import copy
 from spinal_surgery.assets.kuka_US import *
 from spinal_surgery.assets.kuka_drill import *
 from isaaclab.utils.math import subtract_frame_transforms, combine_frame_transforms, matrix_from_quat, quat_from_matrix
-from isaaclab.utils.math import quat_from_euler_xyz, quat_mul
+from isaaclab.utils.math import quat_from_euler_xyz, quat_mul, apply_delta_pose
 from pxr import Gf, UsdGeom
 from scipy.spatial.transform import Rotation as R
 from spinal_surgery.lab.kinematics.human_frame_viewer import HumanFrameViewer
@@ -162,7 +162,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         ik_params = {"lambda_val": 0.01}
         pose_diff_ik_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls", ik_params=ik_params)
         self.pose_diff_ik_controller = DifferentialIKController(pose_diff_ik_cfg, self.scene.num_envs, device=self.sim.device)
-        diff_ik_cfg_drill = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=True, ik_method="dls", ik_params=ik_params)
+        diff_ik_cfg_drill = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls", ik_params=ik_params)
         self.diff_ik_controller_drill = DifferentialIKController(diff_ik_cfg_drill, self.scene.num_envs, device=self.sim.device)
 
         # load label maps
@@ -478,10 +478,20 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         # safety_critical = self.tip_pos_along_traj > - self.safe_height
         # actions[safety_critical, 0:2] *= 0.1
         # actions[safety_critical, 3:] *= 0.1
+        
+        # action in ee space
+        ee_to_next_ee_pos, ee_to_next_ee_quat = apply_delta_pose(
+            torch.zeros_like(self.drill_ee_pos_b).to(self.scene.device), 
+            torch.tensor([[1., 0., 0., 0.]]).to(self.scene.device).repeat(self.scene.num_envs, 1),
+            actions
+        )
+        drill_next_ee_pos_b, drill_next_ee_quat_b = combine_frame_transforms(
+            self.drill_ee_pos_b, self.drill_ee_quat_b,
+            ee_to_next_ee_pos, ee_to_next_ee_quat
+        )
 
-        self.diff_ik_controller_drill.set_command(actions, 
-            self.drill_ee_pos_b,
-            self.drill_ee_quat_b)
+        self.diff_ik_controller_drill.set_command(torch.cat(
+            [drill_next_ee_pos_b, drill_next_ee_quat_b], dim=-1))
 
 
     def _apply_action(self):
