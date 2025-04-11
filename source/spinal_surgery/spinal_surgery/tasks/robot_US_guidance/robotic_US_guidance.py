@@ -205,13 +205,15 @@ class roboticUSEnv(DirectRLEnv):
             low=0,
             high=255,
             shape=(self.cfg.observation_space[0], self.cfg.observation_space[1], self.cfg.observation_space[2]),
-            dtype=np.uint8,
+            dtype=np.float32,
         )
 
         self.termination_direct = True
         self.observation_mode = scene_cfg['observation']['mode']
         self.action_mode = scene_cfg['action']['mode']
-        self.action_scale = torch.tensor(scene_cfg['action']['scale'], device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
+        self.action_scale = torch.tensor(scene_cfg['action']['scale'], 
+                                         device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
+        self.w_act = scene_cfg['reward']['w_action']
 
 
     def _setup_scene(self):
@@ -298,15 +300,15 @@ class roboticUSEnv(DirectRLEnv):
         if self.observation_mode == "US":
             self.US_slicer.slice_US(self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7])
             US_img = self.US_slicer.us_img_tensor.permute(0, 3, 1, 2) * self.cfg.observation_scale
-            observations = {"policy": US_img.to(torch.uint8)}
+            observations = {"policy": US_img}
         elif self.observation_mode == "CT":
             self.US_slicer.slice_label_img(self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7])
             CT_img = self.US_slicer.ct_img_tensor.permute(0, 3, 1, 2) * self.cfg.observation_scale
-            observations = {"policy": CT_img.to(torch.uint8)}
+            observations = {"policy": CT_img}
         elif self.observation_mode == "seg":
             self.US_slicer.slice_label_img(self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7])
             label_img = self.US_slicer.label_img_tensor.permute(0, 3, 1, 2) * self.cfg.observation_scale
-            observations = {"policy": label_img.to(torch.uint8)}
+            observations = {"policy": label_img}
         else:
             raise ValueError("Invalid observation mode")
 
@@ -329,6 +331,8 @@ class roboticUSEnv(DirectRLEnv):
             actions = torch.sign(actions) * self.action_scale
         else:
             raise ValueError("Invalid action mode")
+        
+        self.actions = actions
         # actions: dx, dz: in image frame
         human_to_ee_pos, human_to_ee_quat = subtract_frame_transforms(
             self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
@@ -390,7 +394,7 @@ class roboticUSEnv(DirectRLEnv):
 
         self.distance_to_goal = cur_distance_to_goal
 
-        reward -= 0.001 * cur_distance_to_goal # faster to reach the goal
+        reward -= self.w_act * torch.norm(self.actions, dim=-1) # faster to reach the goal
 
         self.total_reward += reward
         # print(self.total_reward)
@@ -408,7 +412,7 @@ class roboticUSEnv(DirectRLEnv):
     
     def _move_towards_target(self, 
                              human_ee_target_pos: torch.Tensor, human_ee_target_quat: torch.Tensor,
-                             num_steps: int = 100):
+                             num_steps: int = 200):
         is_rendering = self.sim.has_gui() or self.sim.has_rtx_sensors()
 
         for _ in range(num_steps):

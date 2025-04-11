@@ -1,6 +1,9 @@
 import torch
 import torch.nn.functional as F
 from monai.networks.nets.unet import UNet
+import os
+from PIL import Image
+import torchvision.transforms as transforms
 
 class USSimulatorNetwork:
     def __init__(self, us_model_cfg, device):
@@ -27,6 +30,10 @@ class USSimulatorNetwork:
         self.label_res = us_model_cfg['label_res']
         self.image_size = self.CT_cfg['size']
 
+        self.cfg = us_model_cfg
+
+        self.construct_train_data_histogram()
+
 
     def simulate_US_image(self, ct_img_tensor):
         '''
@@ -49,18 +56,19 @@ class USSimulatorNetwork:
             )
 
             # down sample and upsample it
-            ct = F.interpolate(
-                ct,
-                size=(self.image_size[0] // 4, self.image_size[1] // 4),
-                mode="nearest-exact",
-                # align_corners=False,
-            )
-            ct = F.interpolate(
-                ct,
-                size=(self.image_size[0], self.image_size[1]),
-                mode="bilinear",
-                align_corners=False,
-            )
+            # ct = F.interpolate(
+            #     ct,
+            #     size=(self.image_size[0] // 4, self.image_size[1] // 4),
+            #     mode="nearest-exact",
+            #     # align_corners=False,
+            # )
+            # ct = F.interpolate(
+            #     ct,
+            #     size=(self.image_size[0], self.image_size[1]),
+            #     mode="bicubic",
+            #     align_corners=False,
+            # )
+            ct = self.test_match_train(ct)
 
             # simulate US image
             us = self.model(ct)
@@ -72,6 +80,96 @@ class USSimulatorNetwork:
                 mode="bilinear",
                 align_corners=False,
             )
+            ct_img_tensor = F.interpolate(
+                ct,
+                size=(ct_img_tensor.shape[-2], ct_img_tensor.shape[-1]),
+                mode="bilinear",
+                align_corners=False,
+            )
             
 
         return us_img_tensor.detach()
+    
+    def read_img_folder(self, folder_path):
+        """
+        Read all images in a folder and return them as a list of tensors.
+        """
+
+
+        # Define the transformation to convert images to tensors
+        transform = transforms.ToTensor()
+
+        # List to hold the image tensors
+        image_tensors = []
+
+        # Iterate through all files in the folder
+        for filename in os.listdir(folder_path):
+            if filename.endswith('.png') or filename.endswith('.jpeg'):
+                img_path = os.path.join(folder_path, filename)
+                img = Image.open(img_path).convert('L')
+                img_tensor = transform(img)
+        
+                #  Append the tensor to the list
+                image_tensors.append(img_tensor)
+    
+        # Stack the list of tensors into a single tensor
+        self.train_samples = torch.stack(image_tensors)
+        self.train_samples = self.train_samples.to(self.device)
+
+
+    def construct_train_data_histogram(self):
+        source_path = self.cfg['train_data_sample_path']
+        self.num_bins = self.cfg['num_bins']
+        device = self.device
+        self.read_img_folder(source_path)
+
+        # normalize
+        source_flat = self.train_samples.flatten()
+        self.src_min, self.src_max = source_flat.min(), source_flat.max()
+        source_norm = (source_flat - self.src_min) / (self.src_max - self.src_min + 1e-8)
+
+        self.read_img_folder(source_path)
+        # Compute the histogram of the training samples
+        # Histogram and CDF
+        self.bin_edges = torch.linspace(0.0, 1.0, steps=self.num_bins + 1, device=device)
+        self.bin_centers = (self.bin_edges[:-1] + self.bin_edges[1:]) / 2.0
+
+        self.source_hist = torch.histc(source_norm, bins=self.num_bins, min=0.0, max=1.0)
+        self.source_cdf = torch.cumsum(self.source_hist, dim=0)
+        self.source_cdf /= self.source_cdf.clone()[-1]
+
+       
+
+
+    def test_match_train(self, test: torch.Tensor) -> torch.Tensor:
+        """
+        Vectorized histogram matching using PyTorch, fully differentiable and GPU-friendly.
+        Assumes source and test are 2D torch tensors.
+        """
+        
+        test_flat = test.flatten()
+
+        # Normalize to [0, 1]
+        ref_min, ref_max = test_flat.min(), test_flat.max()
+
+        test_norm = (test_flat - ref_min) / (ref_max - ref_min + 1e-8)
+
+        test_hist = torch.histc(test_norm, bins=self.num_bins, min=0.0, max=1.0)
+        test_cdf = torch.cumsum(test_hist, dim=0)
+        test_cdf /= test_cdf.clone()[-1]
+
+         # Digitize source
+        test_bins = torch.bucketize(test_norm, self.bin_edges[:-1], right=False)
+        test_bins = torch.clamp(test_bins, 1, self.num_bins) - 1
+
+        # Map: for each source bin, find the closest ref bin with >= cdf
+        mapping_indices = torch.searchsorted(self.source_cdf, test_cdf)
+        mapping_indices = torch.clamp(mapping_indices, 0, self.num_bins - 1)
+
+        # Build LUT: source bin center → matched value
+        lut = self.bin_centers[mapping_indices]
+
+        matched_norm = lut[test_bins]
+        matched = matched_norm * (self.src_max - self.src_min) + self.src_min
+
+        return matched.reshape_as(test)

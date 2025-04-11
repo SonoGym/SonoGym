@@ -10,3 +10,4 @@ Ant locomotion environment.
 import gymnasium as gym
 
 from . import sb3_cnn_extractor
+from . import fsrl_multiinput_extractor

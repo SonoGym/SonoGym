@@ -33,7 +33,7 @@ reconstruction:
 reward:
   incremental_cov: 0.01
   action_length:
-    w_pos: 0.001
+    w_pos: 0.0001
     w_angle: 0.01
 
 action: 
@@ -46,6 +46,6 @@ sim:
   patient_xz_init_range: [[100, 70, 1.5], [180, 200, 3.5]]
   if_use_ct: True
   ct_range: [-300, 3000]
-  vis_us: True
-  vis_rec: True
+  vis_us: False
+  vis_rec: False
   vis_seg_map: False

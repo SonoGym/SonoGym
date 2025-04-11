@@ -14,7 +14,7 @@ class USSlicer(LabelImgSlicer):
     def __init__(self, us_cfg, label_maps, ct_maps, if_use_ct, human_list, num_envs, x_z_range, init_x_z_x_angle, 
                  device, label_convert_map,
                  img_size, img_res, img_thickness=1, roll_adj=0.0, label_res=0.0015, max_distance=0.03, # [m]
-                 body_label=120, height = 0.13, height_img = 0.13, # 0.133
+                 body_label=120, height = 0.13, height_img = 0.133, # 0.133
                  visualize=True, plane_axes={'h': [0, 0, 1], 'w': [1, 0, 0]}, 
                  sim_mode='conv', us_generative_cfg=None):
         '''
@@ -219,6 +219,7 @@ class USSlicer(LabelImgSlicer):
         else:
             ct_img_tensor = self.ct_img_tensor.permute(0, 3, 1, 2).reshape((-1, self.img_size[0], self.img_size[1])) # (n*e, W, H)
             self.us_img_tensor = self.us_sim.simulate_US_image(ct_img_tensor.unsqueeze(1)).permute((0, 1, 3, 2)) # (n*e, 1, W, H)
+            # self.ct_img_tensor = ct_img_tensor.reshape((self.num_envs, -1, self.img_size[0], self.img_size[1])).permute(0, 2, 3, 1) # (n*e, W, H)
         self.us_img_tensor = self.us_img_tensor.reshape((self.num_envs, -1, self.img_size[1], self.img_size[0])).permute(0, 2, 3, 1) # (n, H, W, e)
 
 

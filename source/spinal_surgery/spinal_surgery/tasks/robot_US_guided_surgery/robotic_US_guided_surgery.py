@@ -475,9 +475,9 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         # apply physics constraints
         self.get_traj_to_tip_state()
         
-        # safety_critical = self.tip_pos_along_traj > - self.safe_height
-        # actions[safety_critical, 0:2] *= 0.1
-        # actions[safety_critical, 3:] *= 0.1
+        safety_critical = self.tip_pos_along_traj > - self.safe_height
+        actions[safety_critical, 0:2] *= 0.1
+        actions[safety_critical, 3:] *= 0.1
         
         # action in ee space
         ee_to_next_ee_pos, ee_to_next_ee_quat = apply_delta_pose(
@@ -533,21 +533,30 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         )
         safe_close = torch.logical_and(
             safe_close,
-            self.last_tip_pos_along_traj < self.vertebra_viewer.traj_half_length
+            self.tip_pos_along_traj < self.vertebra_viewer.traj_half_length
         )
         unsafe = torch.logical_and(torch.logical_not(safe_close), safety_critical)
+        self.ever_unsafe[unsafe] = 1
+        always_safe = torch.logical_not(self.ever_unsafe)
 
         # reward insertion
+        always_safe_and_close = torch.logical_and(always_safe, safe_close)
+        self.max_tip_pos_along_traj = torch.maximum(self.tip_pos_along_traj, self.max_tip_pos_along_traj)
         reward[safe_close] += self.w_insertion * (
-            torch.abs(self.last_tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
-            - torch.abs(self.tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
+            torch.abs(self.last_max_tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
+            - torch.abs(self.max_tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
         )
         # to avoid loop
         self.total_insertion[safe_close] += (
-            torch.abs(self.last_tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
-            - torch.abs(self.tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
+            torch.abs(self.last_max_tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
+            - torch.abs(self.max_tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
         )
-
+        # print('')
+        # print('max_tip_pos_along_traj', self.max_tip_pos_along_traj)
+        # print('last_max_tip_pos_along_traj', self.last_max_tip_pos_along_traj)
+        # print('safe_close', safe_close)
+        # print('last_traj_pos_along_traj_safe_close', self.last_traj_pos_along_traj_safe_close)
+        # print('traj_half_length', self.vertebra_viewer.traj_half_length)
         # last safe now free
         # last_unsafe_now_free = torch.logical_and(self.last_unsafe, free_region)
         # reward[last_unsafe_now_free] += self.w_cost * 0.5
@@ -587,7 +596,8 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.last_traj_to_tip_sin = copy.deepcopy(self.traj_to_tip_sin)
         self.last_unsafe = copy.deepcopy(unsafe)
         self.last_safe_close = copy.deepcopy(safe_close)
-        # self.last_traj_pos_along_traj_safe_close[safe_close] = self.tip_pos_along_traj[safe_close]
+        # self.last_traj_pos_along_traj_safe_close[safe_close] = copy.deepcopy(self.tip_pos_along_traj[safe_close])
+        self.last_max_tip_pos_along_traj = copy.deepcopy(self.max_tip_pos_along_traj)
 
         # print('free_region', free_region)
         # print('last_tip_pos_along_traj', self.last_tip_pos_along_traj)
@@ -599,16 +609,20 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         # print('')
         # print('safety_critical', safety_critical)
         # print('unsafe', unsafe)
-        # print('reward', reward)
+        # print('')
+        
         # print('cost', cost)
         # print('')
 
         self.total_rewards += reward
         self.total_costs += cost
+        # print('total reward', self.total_rewards)
+        # print('ever_unsafe', self.ever_unsafe)
+        # print('always_safe_and_close', always_safe_and_close)
+        # print('total_insertion', self.total_insertion)
 
         # print('total_reward', self.total_rewards)
-        # print('safe_close', safe_close)
-        # print('total_costs', self.total_costs)
+        # print('total_costs', self.tip_pos_along_traj)
         # TODO: update cost for safe learning
         self.extras['cost'] = unsafe.to(torch.float32)
 
@@ -766,12 +780,17 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.get_drill_ee_pose_b()
         self.get_traj_to_tip_state()
         self.last_tip_pos_along_traj = copy.deepcopy(self.tip_pos_along_traj)
+
+        self.max_tip_pos_along_traj = copy.deepcopy(self.tip_pos_along_traj)
+        self.last_max_tip_pos_along_traj = copy.deepcopy(self.tip_pos_along_traj)
+
         self.last_tip_to_traj_dist = copy.deepcopy(self.tip_to_traj_dist)
         self.last_traj_to_tip_sin = copy.deepcopy(self.traj_to_tip_sin)
         self.last_unsafe = torch.zeros(self.scene.num_envs, device=self.sim.device)
         self.last_safe_close = torch.zeros(self.scene.num_envs, device=self.sim.device)
         self.total_insertion = torch.zeros(self.scene.num_envs, device=self.sim.device)
-        self.last_traj_pos_along_traj_safe_close = torch.zeros(self.scene.num_envs, device=self.sim.device)
+        self.last_traj_pos_along_traj_safe_close = torch.ones(self.scene.num_envs, device=self.sim.device) * (-self.safe_height)
+        self.ever_unsafe = torch.zeros(self.scene.num_envs, device=self.sim.device)
 
         self.total_rewards = torch.zeros(self.scene.num_envs, device=self.sim.device)
         self.total_costs = torch.zeros(self.scene.num_envs, device=self.sim.device)
