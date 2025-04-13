@@ -46,7 +46,7 @@ reward:
 
 
 sim:
-  episode_length: 10 # 10
+  episode_length: 1000 # 10
   patient_xz_range: [[100, 70, 1.5], [180, 200, 3.5]]
   patient_xz_init_range: [[100, 70, 1.5], [180, 200, 3.5]]
   if_use_ct: True

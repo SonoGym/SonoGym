@@ -93,7 +93,7 @@ scale = 1/label_res
 class roboticUSEnvCfg(DirectRLEnvCfg):
     # env
     decimation = 2
-    episode_length_s = 5 # 300
+    episode_length_s = scene_cfg['sim']['episode_length'] # 300
     action_scale = 1 
     action_space = 3
     observation_space = [1, 150, 200]
@@ -123,7 +123,7 @@ class roboticUSEnv(DirectRLEnv):
         self.US_ee_jacobi_idx = self.robot_entity_cfg.body_ids[-1]
 
         # define ik controllers
-        ik_params = {"lambda_val": 0.00001}
+        ik_params = {"lambda_val": 0.01}
         pose_diff_ik_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls", ik_params=ik_params)
         self.pose_diff_ik_controller = DifferentialIKController(pose_diff_ik_cfg, self.scene.num_envs, device=self.sim.device)
 
@@ -387,14 +387,15 @@ class roboticUSEnv(DirectRLEnv):
         # print(cur_cmd_pose)
 
         # add reward for getting closer to the target
-        cur_distance_to_goal = torch.norm(cur_cmd_pose[:, 0:2] - self.goal_cmd_pose[:, 0:2], dim=-1) * 0.001
+        cur_distance_to_goal = torch.norm(cur_cmd_pose[:, 0:2] - self.goal_cmd_pose[:, 0:2], dim=-1) * 0.03
         cur_distance_to_goal += torch.norm(cur_cmd_pose[:, 2:3] - self.goal_cmd_pose[:, 2:3], dim=-1)
 
         reward = self.distance_to_goal - cur_distance_to_goal
 
         self.distance_to_goal = cur_distance_to_goal
 
-        reward -= self.w_act * torch.norm(self.actions, dim=-1) # faster to reach the goal
+        # reward -= self.w_act * torch.norm(self.actions, dim=-1) # faster to reach the goal
+        # reward -= self.w_act * cur_distance_to_goal
 
         self.total_reward += reward
         # print(self.total_reward)
@@ -518,7 +519,7 @@ class roboticUSEnv(DirectRLEnv):
             self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
         )
         self.cur_cmd_pose = self.gt_motion_generator.human_cmd_state_from_ee_pose(cur_human_ee_pos, cur_human_ee_quat)
-        self.distance_to_goal = torch.norm(self.cur_cmd_pose[:, 0:2] - self.goal_cmd_pose[:, 0:2], dim=-1) * 0.001
+        self.distance_to_goal = torch.norm(self.cur_cmd_pose[:, 0:2] - self.goal_cmd_pose[:, 0:2], dim=-1) * 0.03
         self.distance_to_goal += torch.norm(self.cur_cmd_pose[:, 2:3] - self.goal_cmd_pose[:, 2:3], dim=-1)
 
         self.total_reward = torch.zeros(self.scene.num_envs, device=self.sim.device)

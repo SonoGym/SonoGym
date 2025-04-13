@@ -475,9 +475,9 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         # apply physics constraints
         self.get_traj_to_tip_state()
         
-        safety_critical = self.tip_pos_along_traj > - self.safe_height
-        actions[safety_critical, 0:2] *= 0.1
-        actions[safety_critical, 3:] *= 0.1
+        # safety_critical = self.tip_pos_along_traj > - self.safe_height
+        # actions[safety_critical, 0:2] *= 0.1
+        # actions[safety_critical, 3:] *= 0.1
         
         # action in ee space
         ee_to_next_ee_pos, ee_to_next_ee_quat = apply_delta_pose(
