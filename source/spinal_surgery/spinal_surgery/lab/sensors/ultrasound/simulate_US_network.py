@@ -56,18 +56,18 @@ class USSimulatorNetwork:
             )
 
             # down sample and upsample it
-            # ct = F.interpolate(
-            #     ct,
-            #     size=(self.image_size[0] // 4, self.image_size[1] // 4),
-            #     mode="nearest-exact",
-            #     # align_corners=False,
-            # )
-            # ct = F.interpolate(
-            #     ct,
-            #     size=(self.image_size[0], self.image_size[1]),
-            #     mode="bicubic",
-            #     align_corners=False,
-            # )
+            ct = F.interpolate(
+                ct,
+                size=(self.image_size[0] // 4, self.image_size[1] // 4),
+                mode="nearest-exact",
+                # align_corners=False,
+            )
+            ct = F.interpolate(
+                ct,
+                size=(self.image_size[0], self.image_size[1]),
+                mode="bilinear",
+                align_corners=False,
+            )
             ct = self.test_match_train(ct)
 
             # simulate US image
@@ -80,12 +80,12 @@ class USSimulatorNetwork:
                 mode="bilinear",
                 align_corners=False,
             )
-            ct_img_tensor = F.interpolate(
-                ct,
-                size=(ct_img_tensor.shape[-2], ct_img_tensor.shape[-1]),
-                mode="bilinear",
-                align_corners=False,
-            )
+            # ct_img_tensor = F.interpolate(
+            #     ct,
+            #     size=(ct_img_tensor.shape[-2], ct_img_tensor.shape[-1]),
+            #     mode="bilinear",
+            #     align_corners=False,
+            # )
             
 
         return us_img_tensor.detach()

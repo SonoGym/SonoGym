@@ -70,8 +70,9 @@ INIT_STATE_ROBOT_DRILL = ArticulationCfg.InitialStateCfg(
     },
     pos = (float(robot_drill_cfg['pos'][0]), float(robot_drill_cfg['pos'][1]), float(robot_drill_cfg['pos'][2])) # ((0.0, -0.75, 0.4))
 )
-DRILL_TO_TIP_POS = np.array([0.0, 0.0, -0.135]).astype(np.float32)
+DRILL_TO_TIP_POS = np.array([0.0, 0.0, -0.135]).astype(np.float32) # -0.135
 DRILL_TO_TIP_QUAT = R.from_euler("YXZ", [180, 0, 0], degrees=True).as_quat().astype(np.float32) 
+
 
 # patient
 patient_cfg = scene_cfg['patient']
@@ -408,6 +409,11 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
                                              device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
         self.drill_to_tip_quat = torch.tensor(DRILL_TO_TIP_QUAT,
                                               device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
+        self.tip_to_drill_pos, self.tip_to_drill_quat = subtract_frame_transforms(
+            self.drill_to_tip_pos, self.drill_to_tip_quat,
+            torch.zeros_like(self.drill_to_tip_pos).to(self.sim.device),
+            torch.tensor([[1., 0., 0., 0.]]).to(self.sim.device).repeat(self.scene.num_envs, 1)
+        )
 
     def action_discrete_to_continuous(self, action):
         # action = 0, 1, 2,...,12
@@ -453,6 +459,10 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
             self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7],
             self.drill_ee_pose_w[:, 0:3], self.drill_ee_pose_w[:, 3:7]
         )
+        self.US_to_tip_pos, self.US_to_tip_quat = combine_frame_transforms(
+            self.US_to_drill_pos, self.US_to_drill_quat,
+            self.drill_to_tip_pos, self.drill_to_tip_quat
+        )
 
         observations = {
             "policy": {'image': obs_img.to(torch.uint8), 'pos': self.US_to_drill_pos, 'quat': self.US_to_drill_quat}}
@@ -475,20 +485,30 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         # apply physics constraints
         self.get_traj_to_tip_state()
         
-        # safety_critical = self.tip_pos_along_traj > - self.safe_height
+        safety_critical = self.tip_pos_along_traj > - self.safe_height
         # actions[safety_critical, 0:2] *= 0.1
-        # actions[safety_critical, 3:] *= 0.1
+        actions[safety_critical, 3:] *= 0.1
         
         # action in ee space
-        ee_to_next_ee_pos, ee_to_next_ee_quat = apply_delta_pose(
+        tip_to_next_tip_pos, tip_to_next_tip_quat = apply_delta_pose(
             torch.zeros_like(self.drill_ee_pos_b).to(self.scene.device), 
             torch.tensor([[1., 0., 0., 0.]]).to(self.scene.device).repeat(self.scene.num_envs, 1),
             actions
         )
-        drill_next_ee_pos_b, drill_next_ee_quat_b = combine_frame_transforms(
+        tip_pos_b, tip_quat_b = combine_frame_transforms(
             self.drill_ee_pos_b, self.drill_ee_quat_b,
-            ee_to_next_ee_pos, ee_to_next_ee_quat
+            self.drill_to_tip_pos, self.drill_to_tip_quat,
         )
+        next_tip_pos_b, next_tip_quat_b = combine_frame_transforms(
+            tip_pos_b, tip_quat_b,
+            tip_to_next_tip_pos, tip_to_next_tip_quat
+        )
+        # next drill_pos
+        drill_next_ee_pos_b, drill_next_ee_quat_b = combine_frame_transforms(
+            next_tip_pos_b, next_tip_quat_b,
+            self.tip_to_drill_pos, self.tip_to_drill_quat
+        )
+
 
         self.diff_ik_controller_drill.set_command(torch.cat(
             [drill_next_ee_pos_b, drill_next_ee_quat_b], dim=-1))
@@ -572,11 +592,11 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
             self.last_safe_close,
             unsafe
         )
-        # last_unsafe_now_safe_close = torch.logical_and(
-        #     unsafe,
-        #     safe_close
-        # )
-        # reward[last_unsafe_now_safe_close] += self.w_cost * 0.9 * self.total_insertion[last_unsafe_now_safe_close]
+        last_unsafe_now_safe_close = torch.logical_and(
+            self.last_unsafe,
+            safe_close
+        )
+        reward[last_unsafe_now_safe_close] += self.w_cost * self.total_insertion[last_unsafe_now_safe_close]
 
         penalty[last_safe_close_now_unsafe] = self.total_insertion[last_safe_close_now_unsafe]
 
@@ -624,7 +644,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         # print('total_reward', self.total_rewards)
         # print('total_costs', self.tip_pos_along_traj)
         # TODO: update cost for safe learning
-        self.extras['cost'] = unsafe.to(torch.float32)
+        self.extras['cost'] = unsafe.to(torch.float32) / 500
 
         return reward 
     
@@ -639,7 +659,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
     
     def _move_towards_target(self, 
                              human_ee_target_pos: torch.Tensor, human_ee_target_quat: torch.Tensor,
-                             num_steps: int = 200):
+                             num_steps: int = 300):
         is_rendering = self.sim.has_gui() or self.sim.has_rtx_sensors()
 
         for _ in range(num_steps):

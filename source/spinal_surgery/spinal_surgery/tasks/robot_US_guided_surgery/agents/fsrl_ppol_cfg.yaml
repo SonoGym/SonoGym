@@ -2,9 +2,13 @@
 task: 'Isaac-robot-US-guided-surgery-v0'
 epoch: 1000
 episode_per_collect: 16
-repeat_per_collect: 1  # increasing this can improve efficiency, but less stability
-buffer_size: 8192
-batch_size: 4
-step_per_epoch: 1024
-lr: 0.0003
-cost_limit: 100
+repeat_per_collect: 2  # increasing this can improve efficiency, but less stability
+buffer_size: 4096
+batch_size: 32
+step_per_epoch: 4096
+lr: 0.0001
+cost_limit: 1.0
+logdir: "logs"
+project: "fast-safe-rl"
+prefix: "ppol"
+suffix: "default_cost_limit_1"

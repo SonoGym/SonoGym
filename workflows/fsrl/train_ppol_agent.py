@@ -190,11 +190,13 @@ def train(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, age
         preprocess_net_output_dim=args.hidden_sizes[0],
     ).to(args.device)
 
-    critic = Critic(
+    critic = [
+         Critic(
             MultiInputNN(train_envs.observation_space.shape, args.hidden_sizes[0]).to(args.device),
             device=args.device,
             preprocess_net_output_dim=args.hidden_sizes[0],
-        ).to(args.device)
+        ).to(args.device) for _ in range(2)
+    ]
     
 
     torch.nn.init.constant_(actor.sigma_param, -0.5)

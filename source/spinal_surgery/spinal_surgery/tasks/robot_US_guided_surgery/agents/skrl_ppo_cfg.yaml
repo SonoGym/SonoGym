@@ -73,8 +73,8 @@ memory:
 agent:
   class: PPO
   rollouts: 64
-  learning_epochs: 5
-  mini_batches: 64
+  learning_epochs: 4
+  mini_batches: 32
   discount_factor: 0.99
   lambda: 0.95
   learning_rate: 1.0e-04
@@ -97,9 +97,10 @@ agent:
   rewards_shaper_scale: 1.0
   time_limit_bootstrap: False
   # logging and checkpoint
+  # logging and checkpoint
   experiment:
-    directory: "body_frame/surgery_insertion_100_cost_insert_20_nstep_64_bs_64_epoch_5_clip_02_US_max_cons"
-    experiment_name: ""
+    directory: "surgery_tip_frame"
+    experiment_name: "PPO_default_US_cons_tip_obs"
     write_interval: auto
     checkpoint_interval: auto
 

@@ -25,7 +25,6 @@ RUN bash -i -c "source ${HOME}/.bashrc && \
 
 # install fsrl
 RUN bash -i -c "cd ${DOCKER_ISAACLAB_EXTENSION_TEMPLATE_PATH} && \
-    git clone https://github.com/liuzuxin/fsrl.git && \
     cd fsrl && \
     pip install -e ."
 
