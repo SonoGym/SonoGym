@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2024, The Isaac Lab Project Developers.
+# Copyright (c) 2022-2025, The Isaac Lab Project Developers.
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
@@ -6,11 +6,14 @@
 from __future__ import annotations
 
 import argparse
+import os
 import random
+import re
+import tempfile
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg
+    from isaaclab_rl.rsl_rl import RslRlBaseRunnerCfg
 
 
 def add_rsl_rl_args(parser: argparse.ArgumentParser):
@@ -27,7 +30,7 @@ def add_rsl_rl_args(parser: argparse.ArgumentParser):
     )
     arg_group.add_argument("--run_name", type=str, default=None, help="Run name suffix to the log directory.")
     # -- load arguments
-    arg_group.add_argument("--resume", type=bool, default=None, help="Whether to resume from a checkpoint.")
+    arg_group.add_argument("--resume", action="store_true", default=False, help="Whether to resume from a checkpoint.")
     arg_group.add_argument("--load_run", type=str, default=None, help="Name of the run folder to resume from.")
     arg_group.add_argument("--checkpoint", type=str, default=None, help="Checkpoint file to resume from.")
     # -- logger arguments
@@ -39,7 +42,7 @@ def add_rsl_rl_args(parser: argparse.ArgumentParser):
     )
 
 
-def parse_rsl_rl_cfg(task_name: str, args_cli: argparse.Namespace) -> RslRlOnPolicyRunnerCfg:
+def parse_rsl_rl_cfg(task_name: str, args_cli: argparse.Namespace) -> RslRlBaseRunnerCfg:
     """Parse configuration for RSL-RL agent based on inputs.
 
     Args:
@@ -52,12 +55,12 @@ def parse_rsl_rl_cfg(task_name: str, args_cli: argparse.Namespace) -> RslRlOnPol
     from isaaclab_tasks.utils.parse_cfg import load_cfg_from_registry
 
     # load the default configuration
-    rslrl_cfg: RslRlOnPolicyRunnerCfg = load_cfg_from_registry(task_name, "rsl_rl_cfg_entry_point")
+    rslrl_cfg: RslRlBaseRunnerCfg = load_cfg_from_registry(task_name, "rsl_rl_cfg_entry_point")
     rslrl_cfg = update_rsl_rl_cfg(rslrl_cfg, args_cli)
     return rslrl_cfg
 
 
-def update_rsl_rl_cfg(agent_cfg: RslRlOnPolicyRunnerCfg, args_cli: argparse.Namespace):
+def update_rsl_rl_cfg(agent_cfg: RslRlBaseRunnerCfg, args_cli: argparse.Namespace):
     """Update configuration for RSL-RL agent based on inputs.
 
     Args:
@@ -89,3 +92,62 @@ def update_rsl_rl_cfg(agent_cfg: RslRlOnPolicyRunnerCfg, args_cli: argparse.Name
         agent_cfg.neptune_project = args_cli.log_project_name
 
     return agent_cfg
+
+
+def get_checkpoint_path_from_wandb(project: str, run_id: str, checkpoint: str = ".*", entity: str | None = None) -> str:
+    """Download checkpoint from wandb for the provided project and run ID.
+
+    This method downloads the checkpoint from wandb and saves it in the local ``/tmp`` directory.
+    The checkpoint is then moved to the local directory and returned.
+
+    The run is loaded using the wandb API. It is assumed to follow the pattern:
+    ``<entity>/<project>/<run_id>/files/<checkpoint_file>``.
+
+    Args:
+        run_id: The run ID to download the checkpoint from.
+        project: The project name to download the checkpoint from.
+        checkpoint: The checkpoint name to download. Defaults to the most recent checkpoint.
+        entity: The entity name to download the checkpoint from. Defaults to None.
+
+    Returns:
+        The path to the model checkpoint.
+    """
+    from wandb.apis.public.files import File
+
+    import wandb
+
+    # check valid arguments
+    if run_id is None:
+        raise ValueError("Please provide a valid Wandb run ID.")
+    if project is None:
+        raise ValueError("Please provide a valid Wandb project name.")
+    # resolve entity if not provided
+    if entity is None:
+        run_name = f"{project}/{run_id}"
+    else:
+        run_name = f"{entity}/{project}/{run_id}"
+
+    print(f"[INFO] Fetching run from Wandb with name: {run_name}")
+
+    # obtain wandb run
+    wandb_run = wandb.Api().run(run_name)
+    # obtain list of checkpoints from wandb
+    model_checkpoints = wandb_run.files()
+
+    # remove files that are not checkpoints
+    model_checkpoints: list[File] = [f for f in model_checkpoints if re.match(checkpoint, f.name)]
+    # check we have at least one checkpoint
+    if len(model_checkpoints) == 0:
+        raise ValueError(f"No checkpoints in the run: '{run_name}' match '{checkpoint}'.")
+
+    # sort alphabetically while ensuring that *_10 comes after *_9
+    model_checkpoints = sorted(model_checkpoints, key=lambda f: f"{f.name:0>15}")
+    # get latest matched checkpoint file
+    checkpoint_file = model_checkpoints[-1]
+
+    # create temporary directory
+    tmp_dir = tempfile.mkdtemp()
+    # download the checkpoint
+    checkpoint_file.download(root=tmp_dir, replace=True, exist_ok=True)
+    # return the path to the checkpoint
+    return os.path.join(tmp_dir, checkpoint_file.name)
