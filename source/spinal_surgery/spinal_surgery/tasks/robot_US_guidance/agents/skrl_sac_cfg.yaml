@@ -132,16 +132,16 @@ agent:
   class: SAC
   rollouts: 500
   gradient_steps: 1           # gradient steps
-  batch_size: 64              # training batch size
+  batch_size: 256              # training batch size
 
   discount_factor: 0.99       # discount factor (gamma)
   polyak: 0.005               # soft update hyperparameter (tau)
 
-  actor_learning_rate: 0.001   # actor learning rate
-  critic_learning_rate: 0.001  # critic learning rate
+  actor_learning_rate: 0.0003   # actor learning rate
+  critic_learning_rate: 0.0003  # critic learning rate
 
   random_timesteps: 0         # random exploration steps
-  learning_starts: 0          # learning starts after this many steps
+  learning_starts: 1000          # learning starts after this many steps
 
   grad_norm_clip: 0           # clipping coefficient for the norm of the gradients
 
@@ -153,7 +153,7 @@ agent:
 
   experiment:
     directory:  'US_guidance'          # experiment's parent directory
-    experiment_name: 'SAC_500'
+    experiment_name: 'SAC_dm_default'
 
 
 # Sequential trainer
