@@ -34,6 +34,7 @@ from ruamel.yaml import YAML
 from spinal_surgery import PACKAGE_DIR
 from spinal_surgery.lab.kinematics.gt_motion_generator import GTMotionGenerator, GTDiscreteMotionGenerator
 import cProfile
+import wandb
 
 scene_cfg = YAML().load(open(f"{PACKAGE_DIR}/tasks/robot_US_guidance/cfgs/robotic_US_guidance.yaml", 'r'))
 
@@ -522,6 +523,8 @@ class roboticUSEnv(DirectRLEnv):
         self.distance_to_goal = torch.norm(self.cur_cmd_pose[:, 0:2] - self.goal_cmd_pose[:, 0:2], dim=-1) * 0.03
         self.distance_to_goal += torch.norm(self.cur_cmd_pose[:, 2:3] - self.goal_cmd_pose[:, 2:3], dim=-1)
 
+        if hasattr(self, 'total_reward'):
+            wandb.log({'total_reward': self.total_reward.mean().item(),})
         self.total_reward = torch.zeros(self.scene.num_envs, device=self.sim.device)
 
 

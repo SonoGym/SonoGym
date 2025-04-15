@@ -1,0 +1,22 @@
+# Configuration for a wandb sweep
+# Running the following command under the hood:
+
+program: workflows/skrl/train_debug.py
+description: "US_guidance_ppo"
+name: us_guidance
+method: bayes
+metric:
+  goal: maximize
+  name: total_reward
+parameters:
+  agent.rollouts: 
+    values: [64, 32, 16]
+  agent.mini_batches: 
+    values: [128, 32, 4]
+
+command:
+  - python
+  - ${program}
+  - "--headless"
+  - "--task=Isaac-robot-US-guidance-v0"
+  - ${args_no_hyphens}

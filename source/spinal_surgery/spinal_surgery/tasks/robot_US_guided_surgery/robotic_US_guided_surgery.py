@@ -40,6 +40,7 @@ from spinal_surgery import PACKAGE_DIR
 from spinal_surgery.lab.kinematics.gt_motion_generator import GTMotionGenerator, GTDiscreteMotionGenerator
 import cProfile
 from gymnasium.spaces import Dict
+import wandb
 
 scene_cfg = YAML().load(open(f"{PACKAGE_DIR}/tasks/robot_US_guided_surgery/cfgs/robotic_US_guided_surgery.yaml", 'r'))
 us_cfg = YAML().load(open(f"{PACKAGE_DIR}/lab/sensors/cfgs/us_cfg.yaml", 'r'))
@@ -812,6 +813,8 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.last_traj_pos_along_traj_safe_close = torch.ones(self.scene.num_envs, device=self.sim.device) * (-self.safe_height)
         self.ever_unsafe = torch.zeros(self.scene.num_envs, device=self.sim.device)
 
+        if hasattr(self, 'total_rewards'): 
+            wandb.log({'total_reward': self.total_rewards.mean().item(),})
         self.total_rewards = torch.zeros(self.scene.num_envs, device=self.sim.device)
         self.total_costs = torch.zeros(self.scene.num_envs, device=self.sim.device)
 

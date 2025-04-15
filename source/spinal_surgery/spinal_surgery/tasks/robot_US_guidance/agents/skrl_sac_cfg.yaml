@@ -1,6 +1,5 @@
 seed: 42
 
-
 # Models are instantiated using skrl's model instantiator utility
 # https://skrl.readthedocs.io/en/latest/api/utils/model_instantiators.html
 # Models are instantiated using skrl's model instantiator utility
@@ -9,7 +8,7 @@ models:
   separate: True
   policy:  # see gaussian_model parameters
     class: GaussianMixin # CategoricalMixin # 
-    clip_actions: False
+    clip_actions: True
     clip_log_std: True
     min_log_std: -20.0
     max_log_std: 2.0
@@ -18,8 +17,7 @@ models:
       - name: features_extractor
         input: STATES  # PyTorch NHWC -> NCHW
         layers:
-          - conv2d: {out_channels: 32, kernel_size: 8, stride: 2, padding: 0}
-          - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
+          - conv2d: {out_channels: 32, kernel_size: 8, stride: 3, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 3, stride: 1, padding: 0}
           - flatten
@@ -27,7 +25,7 @@ models:
       - name: net
         input: features_extractor
         layers: [512, 256, 128]
-        activations: elu
+        activations: relu
     output: ACTIONS
   critic_1:  # see deterministic_model parameters
     class: DeterministicMixin
@@ -36,20 +34,19 @@ models:
       - name: features_extractor
         input: STATES  # PyTorch NHWC -> NCHW
         layers:
-          - conv2d: {out_channels: 32, kernel_size: 8, stride: 2, padding: 0}
-          - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
+          - conv2d: {out_channels: 32, kernel_size: 8, stride: 3, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 3, stride: 1, padding: 0}
           - flatten
         activations: relu
       - name: act_net
         input: ACTIONS
-        layers: [512, 256, 128]
-        activations: elu
+        layers: [128, 128]
+        activations: relu
       - name: net
         input: concatenate([features_extractor, act_net])
-        layers: [512, 256, 128]
-        activations: elu
+        layers: [128, 128]
+        activations: relu
     output: ONE
   critic_2:  # see deterministic_model parameters
     class: DeterministicMixin
@@ -58,20 +55,19 @@ models:
       - name: features_extractor
         input: STATES  # PyTorch NHWC -> NCHW
         layers:
-          - conv2d: {out_channels: 32, kernel_size: 8, stride: 2, padding: 0}
-          - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
+          - conv2d: {out_channels: 32, kernel_size: 8, stride: 3, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 3, stride: 1, padding: 0}
           - flatten
         activations: relu
       - name: act_net
         input: ACTIONS
-        layers: [512, 256, 128]
-        activations: elu
+        layers: [128, 128]
+        activations: relu
       - name: net
         input: concatenate([features_extractor, act_net])
-        layers: [512, 256, 128]
-        activations: elu
+        layers: [128, 128]
+        activations: relu
     output: ONE
   target_critic_1:  # see deterministic_model parameters
     class: DeterministicMixin
@@ -80,20 +76,19 @@ models:
       - name: features_extractor
         input: STATES  # PyTorch NHWC -> NCHW
         layers:
-          - conv2d: {out_channels: 32, kernel_size: 8, stride: 2, padding: 0}
-          - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
+          - conv2d: {out_channels: 32, kernel_size: 8, stride: 3, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 3, stride: 1, padding: 0}
           - flatten
         activations: relu
       - name: act_net
         input: ACTIONS
-        layers: [512, 256, 128]
-        activations: elu
+        layers: [128, 128]
+        activations: relu
       - name: net
         input: concatenate([features_extractor, act_net])
-        layers: [512, 256, 128]
-        activations: elu
+        layers: [128, 128]
+        activations: relu
     output: ONE
   target_critic_2:  # see deterministic_model parameters
     class: DeterministicMixin
@@ -102,20 +97,19 @@ models:
       - name: features_extractor
         input: STATES  # PyTorch NHWC -> NCHW
         layers:
-          - conv2d: {out_channels: 32, kernel_size: 8, stride: 2, padding: 0}
-          - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
+          - conv2d: {out_channels: 32, kernel_size: 8, stride: 3, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 3, stride: 1, padding: 0}
           - flatten
         activations: relu
       - name: act_net
         input: ACTIONS
-        layers: [512, 256, 128]
-        activations: elu
+        layers: [128, 128]
+        activations: relu
       - name: net
         input: concatenate([features_extractor, act_net])
-        layers: [512, 256, 128]
-        activations: elu
+        layers: [128, 128]
+        activations: relu
     output: ONE
 
 
@@ -128,32 +122,26 @@ memory:
 
 # PPO agent configuration (field names are from PPO_DEFAULT_CONFIG)
 # https://skrl.readthedocs.io/en/latest/api/agents/ppo.html
+
 agent:
   class: SAC
   rollouts: 500
   gradient_steps: 1           # gradient steps
   batch_size: 256              # training batch size
-
   discount_factor: 0.99       # discount factor (gamma)
   polyak: 0.005               # soft update hyperparameter (tau)
-
-  actor_learning_rate: 0.0003   # actor learning rate
-  critic_learning_rate: 0.0003  # critic learning rate
-
+  actor_learning_rate: 0.0001   # actor learning rate
+  critic_learning_rate: 0.001  # critic learning rate
   random_timesteps: 0         # random exploration steps
   learning_starts: 1000          # learning starts after this many steps
-
   grad_norm_clip: 0           # clipping coefficient for the norm of the gradients
-
   learn_entropy: True         # learn entropy
   entropy_learning_rate: 0.001 # entropy learning rate
   initial_entropy_value: 0.2  # initial entropy value
-
   mixed_precision: False      # enable automatic mixed precision for higher performance
-
   experiment:
-    directory:  'US_guidance'          # experiment's parent directory
-    experiment_name: 'SAC_dm_default'
+    directory: US_guidance          # experiment's parent directory
+    experiment_name: SAC_dm_default
 
 
 # Sequential trainer
@@ -162,3 +150,4 @@ trainer:
   class: SequentialTrainer
   timesteps: 500000
   environment_info: log
+

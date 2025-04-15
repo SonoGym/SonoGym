@@ -8,7 +8,7 @@ seed: 42
 models:
   separate: True
   policy:  # see gaussian_model parameters
-    class: GaussianMixin # CategoricalMixin # 
+    class: DeterministicMixin # CategoricalMixin # 
     clip_actions: False
     clip_log_std: True
     min_log_std: -20.0

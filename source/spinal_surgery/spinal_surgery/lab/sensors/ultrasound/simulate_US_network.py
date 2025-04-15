@@ -43,7 +43,7 @@ class USSimulatorNetwork:
         with torch.no_grad():
 
             # intensity scale: [-1, 1]
-            print('ct', torch.min(ct_img_tensor), torch.max(ct_img_tensor))
+            # print('ct', torch.min(ct_img_tensor), torch.max(ct_img_tensor))
             ct = torch.clamp(ct_img_tensor, self.CT_cfg["range"][0], self.CT_cfg["range"][1])
             ct = (ct - self.CT_cfg["range"][0]) / (self.CT_cfg["range"][1] - self.CT_cfg["range"][0]) # * 2 - 1
 
