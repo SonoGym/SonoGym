@@ -1,0 +1,26 @@
+# Configuration for a wandb sweep
+# Running the following command under the hood:
+#
+# wandb sweep scripts/rsl_rl/sweep/cube_push_anymal_d.yaml
+
+program: scripts/rsl_rl/train.py
+description: "Sweep for pushing cubes with Anymal-D"
+name: cube_push_anymal_d
+method: bayes
+metric:
+  goal: maximize
+  name: Metrics/object_goal/is_success
+parameters:
+  agent.num_steps_per_env:
+    values: [24, 48, 96]
+  agent.policy.init_noise_std:
+    values: [1.0, 2.0, 5.0]
+  agent.algorithm.entropy_coef:
+    values: [0.0, 0.001, 0.0015, 0.002, 0.005]
+
+command:
+  - /isaac-sim/python.sh
+  - ${program}
+  - "--headless"
+  - "--task=Object-Push-Anymal-D-v0"
+  - ${args_no_hyphens}

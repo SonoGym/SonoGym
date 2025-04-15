@@ -45,6 +45,7 @@ import torch
 from rsl_rl.runners import OnPolicyRunner
 
 from isaaclab.envs import DirectMARLEnv, multi_agent_to_single_agent
+from isaaclab.utils.assets import retrieve_file_path
 from isaaclab.utils.dict import print_dict
 from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper, export_policy_as_jit, export_policy_as_onnx
 from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
@@ -59,11 +60,26 @@ def main():
     agent_cfg: RslRlOnPolicyRunnerCfg = cli_args.parse_rsl_rl_cfg(args_cli.task, args_cli)
 
     # specify directory for logging experiments
-    log_root_path = os.path.join("logs", "rsl_rl", agent_cfg.experiment_name)
-    log_root_path = os.path.abspath(log_root_path)
-    print(f"[INFO] Loading experiment from directory: {log_root_path}")
-    resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
+    # get the model checkpoint path
+    if args_cli.wandb_download:
+        if agent_cfg.logger != "wandb":
+            raise ValueError("Wandb download is only supported for wandb logger.")
+        # resolve project name
+        project_name = args_cli.wandb_project if args_cli.wandb_project is not None else agent_cfg.wandb_project
+        resume_path = cli_args.get_checkpoint_path_from_wandb(
+            project_name, args_cli.wandb_run_id, agent_cfg.load_checkpoint, entity=args_cli.wandb_entity
+        )
+    elif args_cli.checkpoint:
+        resume_path = retrieve_file_path(args_cli.checkpoint)
+    else:
+        log_root_path = os.path.join("logs", "rsl_rl", agent_cfg.experiment_name)
+        log_root_path = os.path.abspath(log_root_path)
+        resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
+
+    # resolve log directory
     log_dir = os.path.dirname(resume_path)
+    print(f"[INFO] Loading experiment from directory: {log_dir}")
+    print(f"[INFO] Loading model checkpoint from: {resume_path}")
 
     # create isaac environment
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
