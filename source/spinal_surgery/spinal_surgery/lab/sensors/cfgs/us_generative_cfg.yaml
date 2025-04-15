@@ -1,5 +1,5 @@
-model_path: /home/yunkao/git/IsaacLabExtensionTemplate/models/pix2pix_rand_down_up.pth
-train_data_sample_path: /home/yunkao/git/IsaacLabExtensionTemplate/models/training_samples
+model_path: models/pix2pix_rand_down_up.pth
+train_data_sample_path: models/training_samples
 
 label_res: 0.0015
 num_bins: 256
