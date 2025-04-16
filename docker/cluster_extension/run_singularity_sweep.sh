@@ -72,7 +72,10 @@ singularity exec \
     -B $CLUSTER_GENERATIVE_PATH:/workspace/isaaclab_extension_template/models:rw \
     -B $CLUSTER_ISAACLAB_DIR/logs:/workspace/isaaclab/logs:rw \
     --nv --writable --containall $TMPDIR/$2.sif \
-    bash -c "export ISAACLAB_PATH=/workspace/isaaclab && cd /workspace/isaaclab && /isaac-sim/python.sh ${CLUSTER_PYTHON_EXECUTABLE} ${@:3}"
+    bash -c "export ISAACLAB_PATH=/workspace/isaaclab && cd /workspace/isaaclab \
+    && export WANDB_API_KEY='13568fbdd3c3771b4e8aa397cfdcc0f6b3fb5774' \
+    && /isaac-sim/python.sh -m wandb login \
+    && /isaac-sim/python.sh -m wandb agent ${@:3}"
 
 # copy resulting cache files back to host
 rsync -azPv $TMPDIR/docker-isaac-sim $CLUSTER_ISAAC_SIM_CACHE_DIR/..

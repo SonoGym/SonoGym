@@ -82,6 +82,9 @@ submit_job() {
         "PBS")
             job_script_file=submit_job_pbs.sh
             ;;
+        "SWEEP")
+            job_script_file=submit_job_slurm_sweep.sh
+            ;;
         *)
             echo "[ERROR] Unsupported job scheduler specified: '$CLUSTER_JOB_SCHEDULER'. Supported options are: ['SLURM', 'PBS']"
             exit 1

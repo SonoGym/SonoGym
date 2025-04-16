@@ -44,6 +44,7 @@ import wandb
 
 scene_cfg = YAML().load(open(f"{PACKAGE_DIR}/tasks/robot_US_guided_surgery/cfgs/robotic_US_guided_surgery.yaml", 'r'))
 us_cfg = YAML().load(open(f"{PACKAGE_DIR}/lab/sensors/cfgs/us_cfg.yaml", 'r'))
+us_generative_cfg = YAML().load(open(f"{PACKAGE_DIR}/lab/sensors/cfgs/us_generative_cfg.yaml", 'r'))
 # robot
 robot_cfg = scene_cfg['robot']
 INIT_STATE_ROBOT_US = ArticulationCfg.InitialStateCfg(
@@ -221,6 +222,8 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
             img_thickness=img_thickness,
             roll_adj=scene_cfg['motion_planning']['US_roll_adj'],
             visualize=self.sim_cfg['vis_seg_map'],
+            sim_mode=scene_cfg['sim']['us'],
+            us_generative_cfg=us_generative_cfg,
         )
         self.US_slicer.current_x_z_x_angle_cmd = (self.init_cmd_pose_min + self.init_cmd_pose_max) / 2
 

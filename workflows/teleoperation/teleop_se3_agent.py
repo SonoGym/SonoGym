@@ -45,6 +45,7 @@ from isaaclab_tasks.manager_based.manipulation.lift import mdp
 from isaaclab_tasks.utils import parse_env_cfg
 import spinal_surgery
 import cProfile
+import wandb
 
 def pre_process_actions(delta_pose: torch.Tensor, gripper_command: bool) -> torch.Tensor:
     """Pre-process actions for the environment."""
@@ -75,6 +76,9 @@ def main():
         env_cfg.commands.object_pose.resampling_time_range = (1.0e9, 1.0e9)
         # add termination condition for reaching the goal otherwise the environment won't reset
         env_cfg.terminations.object_reached_goal = DoneTerm(func=mdp.object_reached_goal)
+
+    # init wandb
+    wandb.init(project=args_cli.task, config=env_cfg)
     # create environment
     env = gym.make(args_cli.task, cfg=env_cfg)
     # check environment name (for reach , we don't allow the gripper)

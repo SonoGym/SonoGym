@@ -100,7 +100,7 @@ agent:
   # logging and checkpoint
   experiment:
     directory: "surgery_tip_frame"
-    experiment_name: "PPO_default_US_cons_tip_obs"
+    experiment_name: "PPO_default_US_net"
     write_interval: auto
     checkpoint_interval: auto
 
@@ -109,5 +109,5 @@ agent:
 # https://skrl.readthedocs.io/en/latest/api/trainers/sequential.html
 trainer:
   class: SequentialTrainer
-  timesteps: 500000
+  timesteps: 300000
   environment_info: log
