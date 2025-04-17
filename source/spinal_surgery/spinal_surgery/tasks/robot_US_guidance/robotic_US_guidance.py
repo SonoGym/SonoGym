@@ -318,7 +318,6 @@ class roboticUSEnv(DirectRLEnv):
 
         return observations
 
-        
     def _pre_physics_step(self, actions: torch.Tensor) -> None:
         # if action is 6 dim (SE), convert to 3 dim (xz pos + y rot)
         if actions.shape[-1] == 6:
@@ -357,6 +356,9 @@ class roboticUSEnv(DirectRLEnv):
         # set new command
         self.pose_diff_ik_controller.set_command(base_to_ee_target_pose)
 
+        # record extras
+        self.extras["human_to_ee_pos"] = human_to_ee_pos
+        self.extras["human_to_ee_quat"] = human_to_ee_quat
 
     def _apply_action(self):
         world_to_base_pose = self.robot.data.root_link_state_w[:, 0:7]
@@ -380,7 +382,7 @@ class roboticUSEnv(DirectRLEnv):
     def _get_rewards(self) -> torch.Tensor:
         # get current cmd pose
         cur_human_ee_pos, cur_human_ee_quat = subtract_frame_transforms(
-            self.world_to_human_pos, self.world_to_human_rot, 
+            self.world_to_human_pos, self.world_to_human_rot,
             self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
         )
         cur_cmd_pose = self.gt_motion_generator.human_cmd_state_from_ee_pose(cur_human_ee_pos, cur_human_ee_quat)
@@ -401,6 +403,11 @@ class roboticUSEnv(DirectRLEnv):
         self.total_reward += reward
         # print(self.total_reward)
 
+        # record current cmd pose
+        self.extras["cur_cmd_pose"] = cur_cmd_pose
+        # record current goal pose
+        self.extras["goal_cmd_pose"] = self.goal_cmd_pose
+
         return reward 
     
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
@@ -408,7 +415,7 @@ class roboticUSEnv(DirectRLEnv):
             time_out = self.episode_length_buf >= self.max_episode_length - 1
         else:
             time_out = torch.zeros_like(self.episode_length_buf)
-        out_of_bounds = torch.zeros_like(self.US_slicer.no_collide) # self.US_slicer.no_collide
+        out_of_bounds = torch.zeros_like(self.US_slicer.no_collide)  # self.US_slicer.no_collide
        
         return out_of_bounds, time_out
     
@@ -422,7 +429,7 @@ class roboticUSEnv(DirectRLEnv):
             # set actions into buffers
 
             # get human frame
-            self.human_world_poses = self.human.data.body_link_state_w[:, 0, 0:7] # these are already the initial poses
+            self.human_world_poses = self.human.data.body_link_state_w[:, 0, 0:7]  # these are already the initial poses
             # define world to human poses
             self.world_to_human_pos, self.world_to_human_rot = self.human_world_poses[:, 0:3], self.human_world_poses[:, 3:7]
             world_ee_target_pos, world_ee_target_quat = combine_frame_transforms(
@@ -467,8 +474,6 @@ class roboticUSEnv(DirectRLEnv):
                 self.sim.render()
             # update buffers at sim dt
             self.scene.update(dt=self.physics_dt)
-
-
 
     def _reset_idx(self, env_ids: Sequence[int] | None):
         if env_ids is None:
@@ -524,8 +529,14 @@ class roboticUSEnv(DirectRLEnv):
         self.distance_to_goal += torch.norm(self.cur_cmd_pose[:, 2:3] - self.goal_cmd_pose[:, 2:3], dim=-1)
 
         if hasattr(self, 'total_reward'):
-            wandb.log({'total_reward': self.total_reward.mean().item(),})
+            wandb.log({'total_reward': self.total_reward.mean().item()})
         self.total_reward = torch.zeros(self.scene.num_envs, device=self.sim.device)
+
+        # record infor
+        self.extras["human_to_ee_pos"] = cur_human_ee_pos
+        self.extras["human_to_ee_quat"] = cur_human_ee_quat
+        self.extras["cur_cmd_pose"] = self.cur_cmd_pose
+        self.extras["goal_cmd_pose"] = self.goal_cmd_pose
 
 
 

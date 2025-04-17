@@ -650,6 +650,17 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         # TODO: update cost for safe learning
         self.extras['cost'] = unsafe.to(torch.float32) / 500
 
+        # record information
+        self.extras['traj_drct'] = self.vertebra_viewer.traj_drct
+        self.extras['human_to_tip_pos'] = self.human_to_tip_pos
+        self.extras['human_to_tip_quat'] = self.human_to_tip_quat
+        self.extras['safe_height'] = self.safe_height
+        self.extras['traj_half_length'] = self.vertebra_viewer.traj_half_length
+        self.extras['traj_radius'] = self.vertebra_viewer.traj_radius
+        self.extras['tip_to_traj_dist'] = self.tip_to_traj_dist
+        self.extras['traj_to_tip_sin'] = self.traj_to_tip_sin
+        self.extras['human_to_traj_pos'] = self.vertebra_viewer.human_to_traj_pos
+
         return reward 
     
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
@@ -694,8 +705,8 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
             # compute the joint commands
             joint_pos_des = self.pose_diff_ik_controller.compute(
                 self.US_ee_pos_b,
-                self.US_ee_quat_b, 
-                US_jacobian, 
+                self.US_ee_quat_b,
+                US_jacobian,
                 US_joint_pos
             )
             self.robot.set_joint_position_target(joint_pos_des, joint_ids=self.robot_entity_cfg.joint_ids)
@@ -733,7 +744,6 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
             self.drill_ee_pose_w[:, 0:3], self.drill_ee_pose_w[:, 3:7]
         )
         
-
     def get_traj_to_tip_state(self):
         self.human_to_ee_pos, self.human_to_ee_quat = subtract_frame_transforms(
             self.world_to_human_pos, self.world_to_human_rot, 
@@ -820,6 +830,17 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
             wandb.log({'total_reward': self.total_rewards.mean().item(),})
         self.total_rewards = torch.zeros(self.scene.num_envs, device=self.sim.device)
         self.total_costs = torch.zeros(self.scene.num_envs, device=self.sim.device)
+
+        # record information
+        self.extras['traj_drct'] = self.vertebra_viewer.traj_drct
+        self.extras['human_to_tip_pos'] = self.human_to_tip_pos
+        self.extras['human_to_tip_quat'] = self.human_to_tip_quat
+        self.extras['safe_height'] = self.safe_height
+        self.extras['traj_half_length'] = self.vertebra_viewer.traj_half_length
+        self.extras['traj_radius'] = self.vertebra_viewer.traj_radius
+        self.extras['tip_to_traj_dist'] = self.tip_to_traj_dist
+        self.extras['traj_to_tip_sin'] = self.traj_to_tip_sin
+        self.extras['human_to_traj_pos'] = self.vertebra_viewer.human_to_traj_pos
 
     def check_nan(self):
         if torch.isnan(self.US_ee_pos_b).any() or torch.isnan(self.US_ee_quat_b).any():

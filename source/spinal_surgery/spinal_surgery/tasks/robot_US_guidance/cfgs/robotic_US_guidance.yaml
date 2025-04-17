@@ -20,7 +20,7 @@ motion_planning:
 observation: 
   3D: False
   mode: 'US' # 'seg', 'CT', 'US'
-  scale: 1.0 # 0.1, 0.0005, 1.0 # 1.0 for
+  scale: 1.0 # 0.1, 0.0005, 1.0 # 1.0 for model-based, 0.1 for learning-based
 action: 
   mode: 'continuous' # 'discrete', 'continuous'
   scale: [2, 2, 0.1]
