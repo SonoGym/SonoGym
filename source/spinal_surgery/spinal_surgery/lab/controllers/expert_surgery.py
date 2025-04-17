@@ -53,7 +53,7 @@ class ExpertSurgery:
         human_traj_drct = info['traj_drct']
         human_to_tip_pos = info['human_to_tip_pos']
         human_to_tip_quat = info['human_to_tip_quat']
-        safe_height = info['safe_height']
+        safe_height = info['safe_height'].reshape(-1, 1)
         traj_half_length = info['traj_half_length'].reshape(-1, 1)
         traj_radius = info['traj_radius']
         tip_to_traj_dist = info['tip_to_traj_dist']

@@ -54,5 +54,5 @@ sim:
   if_use_ct: True
   us: 'conv'
   ct_range: [-300, 3000]
-  vis_us: True
+  vis_us: False
   vis_seg_map: False

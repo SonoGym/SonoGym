@@ -30,7 +30,7 @@ models:
         activations: elu
     output: ACTIONS
   target_policy:  # see gaussian_model parameters
-    class: GaussianMixin # CategoricalMixin # 
+    class: DeterministicMixin # CategoricalMixin # 
     clip_actions: False
     clip_log_std: True
     min_log_std: -20.0
@@ -152,7 +152,7 @@ memory:
 # https://skrl.readthedocs.io/en/latest/api/agents/ppo.html
 agent:
   class: TD3
-  rollouts: 500
+  rollouts: 1000
   gradient_steps: 1           # gradient steps
   batch_size: 64              # training batch size
 
@@ -163,7 +163,7 @@ agent:
   critic_learning_rate: 0.001  # critic learning rate
 
   random_timesteps: 0        # random exploration steps
-  learning_starts: 0         # learning starts after this many steps
+  learning_starts: 100         # learning starts after this many steps
 
   grad_norm_clip: 0           # clipping coefficient for the norm of the gradients
 
@@ -174,7 +174,7 @@ agent:
       std: 0.1
     initial_scale: 1.0       # initial scale for the noise
     final_scale: 0.001        # final scale for the noise
-    timesteps: 300000          # timesteps for the noise decay
+    timesteps: 200000          # timesteps for the noise decay
 
   policy_delay: 2                      # policy delay update with respect to critic update
   smooth_regularization_noise: GaussianNoise    # smooth noise for regularization
@@ -188,13 +188,13 @@ agent:
   mixed_precision: False      # enable automatic mixed precision for higher performance
 
   experiment:
-    directory: 'US_guidance'          # experiment's parent directory
-    experiment_name: 'TD3_lr_1e-4'
+    directory: 'US_guidance_TD3_sweep'          # experiment's parent directory
+    experiment_name: 'TD3'
 
 
 # Sequential trainer
 # https://skrl.readthedocs.io/en/latest/api/trainers/sequential.html
 trainer:
   class: SequentialTrainer
-  timesteps: 500000
+  timesteps: 200000
   environment_info: log

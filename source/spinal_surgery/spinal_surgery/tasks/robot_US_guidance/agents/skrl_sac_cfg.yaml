@@ -25,7 +25,7 @@ models:
       - name: net
         input: features_extractor
         layers: [512, 256, 128]
-        activations: relu
+        activations: elu
     output: ACTIONS
   critic_1:  # see deterministic_model parameters
     class: DeterministicMixin
@@ -39,14 +39,14 @@ models:
           - conv2d: {out_channels: 64, kernel_size: 3, stride: 1, padding: 0}
           - flatten
         activations: relu
-      - name: act_net
-        input: ACTIONS
-        layers: [128, 128]
+      - name: feature_net
+        input: features_extractor
+        layers: [256, 128]
         activations: relu
       - name: net
-        input: concatenate([features_extractor, act_net])
+        input: concatenate([feature_net, ACTIONS])
         layers: [128, 128]
-        activations: relu
+        activations: elu
     output: ONE
   critic_2:  # see deterministic_model parameters
     class: DeterministicMixin
@@ -60,14 +60,14 @@ models:
           - conv2d: {out_channels: 64, kernel_size: 3, stride: 1, padding: 0}
           - flatten
         activations: relu
-      - name: act_net
-        input: ACTIONS
-        layers: [128, 128]
+      - name: feature_net
+        input: features_extractor
+        layers: [256, 128]
         activations: relu
       - name: net
-        input: concatenate([features_extractor, act_net])
+        input: concatenate([feature_net, ACTIONS])
         layers: [128, 128]
-        activations: relu
+        activations: elu
     output: ONE
   target_critic_1:  # see deterministic_model parameters
     class: DeterministicMixin
@@ -81,14 +81,14 @@ models:
           - conv2d: {out_channels: 64, kernel_size: 3, stride: 1, padding: 0}
           - flatten
         activations: relu
-      - name: act_net
-        input: ACTIONS
-        layers: [128, 128]
+      - name: feature_net
+        input: features_extractor
+        layers: [256, 128]
         activations: relu
       - name: net
-        input: concatenate([features_extractor, act_net])
+        input: concatenate([feature_net, ACTIONS])
         layers: [128, 128]
-        activations: relu
+        activations: elu
     output: ONE
   target_critic_2:  # see deterministic_model parameters
     class: DeterministicMixin
@@ -102,14 +102,14 @@ models:
           - conv2d: {out_channels: 64, kernel_size: 3, stride: 1, padding: 0}
           - flatten
         activations: relu
-      - name: act_net
-        input: ACTIONS
-        layers: [128, 128]
+      - name: feature_net
+        input: features_extractor
+        layers: [256, 128]
         activations: relu
       - name: net
-        input: concatenate([features_extractor, act_net])
+        input: concatenate([feature_net, ACTIONS])
         layers: [128, 128]
-        activations: relu
+        activations: elu
     output: ONE
 
 
@@ -125,15 +125,15 @@ memory:
 
 agent:
   class: SAC
-  rollouts: 500
+  rollouts: 1000
   gradient_steps: 1           # gradient steps
-  batch_size: 256              # training batch size
+  batch_size: 32              # training batch size
   discount_factor: 0.99       # discount factor (gamma)
   polyak: 0.005               # soft update hyperparameter (tau)
   actor_learning_rate: 0.0001   # actor learning rate
   critic_learning_rate: 0.001  # critic learning rate
   random_timesteps: 0         # random exploration steps
-  learning_starts: 1000          # learning starts after this many steps
+  learning_starts: 100          # learning starts after this many steps
   grad_norm_clip: 0           # clipping coefficient for the norm of the gradients
   learn_entropy: True         # learn entropy
   entropy_learning_rate: 0.001 # entropy learning rate
@@ -148,6 +148,6 @@ agent:
 # https://skrl.readthedocs.io/en/latest/api/trainers/sequential.html
 trainer:
   class: SequentialTrainer
-  timesteps: 500000
+  timesteps: 200000
   environment_info: log
 

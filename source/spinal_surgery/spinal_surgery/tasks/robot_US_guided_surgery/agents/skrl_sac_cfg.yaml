@@ -163,7 +163,7 @@ memory:
 # https://skrl.readthedocs.io/en/latest/api/agents/ppo.html
 agent:
   class: SAC
-  rollouts: 500
+  rollouts: 1000
   gradient_steps: 1           # gradient steps
   batch_size: 64              # training batch size
 
@@ -186,7 +186,7 @@ agent:
 
   experiment:
     directory:  'surgery_tip_frame'          # experiment's parent directory
-    experiment_name: 'SAC_500'
+    experiment_name: 'SAC_1000'
 
 
 # Sequential trainer

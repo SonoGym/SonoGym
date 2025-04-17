@@ -2,29 +2,27 @@
 # Running the following command under the hood:
 
 program: scripts/reinforcement_learning/skrl/train.py
-description: "0417_US_guidance_sac_US_001"
-name: 0417_us_guidance_sac_US_001
+description: "0417_US_guidance_sac_US_1e-2"
+name: 0417_us_guidance_sac_US_1e-2
 method: bayes
 metric:
   goal: maximize
   name: total_reward
 parameters:
   agent.agent.actor_learning_rate:
-    values: [0.00003, 0.00001, 0.0001]
+    values: [0.00003, 0.0001, 0.001]
   agent.agent.critic_learning_rate:
     values: [0.00003, 0.0001, 0.001]
-  agent.agent.initial_entropy_value:
-    values: [0.02, 0.002, 0.0002]
-  agent.agent.entropy_learning_rate:
-    values: [0.001, 0.0001, 0.00001]
   agent.agent.batch_size:
     values: [32, 64, 256]
+  agent.agent.policy_delay:
+    values: [2, 5, 10]
 
 command:
   - /isaac-sim/python.sh
   - ${program}
   - "--headless"
   - "--task=Isaac-robot-US-guidance-v0"
-  - "--algorithm=SAC"
+  - "--algorithm=TD3"
   - "--num_envs=32"
   - ${args_no_hyphens}

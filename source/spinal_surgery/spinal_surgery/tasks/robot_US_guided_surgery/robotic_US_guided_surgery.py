@@ -333,8 +333,6 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         world_to_ee_init_pos, world_to_ee_init_rot = self.US_slicer.compute_world_ee_pose_from_cmd(
             self.world_to_human_pos, self.world_to_human_rot)
         
-        
-
     def _setup_scene(self):
         """Configuration for a cart-pole scene."""
 
@@ -648,13 +646,14 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         # print('total_reward', self.total_rewards)
         # print('total_costs', self.tip_pos_along_traj)
         # TODO: update cost for safe learning
-        self.extras['cost'] = unsafe.to(torch.float32) / 500
+        self.extras['cost'] = unsafe.to(torch.float32) / 50
 
         # record information
+        ones = torch.ones((self.scene.num_envs,), device=self.sim.device)
         self.extras['traj_drct'] = self.vertebra_viewer.traj_drct
         self.extras['human_to_tip_pos'] = self.human_to_tip_pos
         self.extras['human_to_tip_quat'] = self.human_to_tip_quat
-        self.extras['safe_height'] = self.safe_height
+        self.extras['safe_height'] = self.safe_height * ones
         self.extras['traj_half_length'] = self.vertebra_viewer.traj_half_length
         self.extras['traj_radius'] = self.vertebra_viewer.traj_radius
         self.extras['tip_to_traj_dist'] = self.tip_to_traj_dist
@@ -827,15 +826,18 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.ever_unsafe = torch.zeros(self.scene.num_envs, device=self.sim.device)
 
         if hasattr(self, 'total_rewards'): 
-            wandb.log({'total_reward': self.total_rewards.mean().item(),})
+            wandb.log({'total_reward': self.total_rewards.mean().item()})
+        if hasattr(self, 'total_costs'): 
+            wandb.log({'total_cost': self.total_costs.mean().item()})
         self.total_rewards = torch.zeros(self.scene.num_envs, device=self.sim.device)
         self.total_costs = torch.zeros(self.scene.num_envs, device=self.sim.device)
 
         # record information
+        ones = torch.ones((self.scene.num_envs,), device=self.sim.device)
         self.extras['traj_drct'] = self.vertebra_viewer.traj_drct
         self.extras['human_to_tip_pos'] = self.human_to_tip_pos
         self.extras['human_to_tip_quat'] = self.human_to_tip_quat
-        self.extras['safe_height'] = self.safe_height
+        self.extras['safe_height'] = self.safe_height * ones
         self.extras['traj_half_length'] = self.vertebra_viewer.traj_half_length
         self.extras['traj_radius'] = self.vertebra_viewer.traj_radius
         self.extras['tip_to_traj_dist'] = self.tip_to_traj_dist
