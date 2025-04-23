@@ -33,6 +33,7 @@ from spinal_surgery.lab.sensors.ultrasound.US_slicer import USSlicer
 from ruamel.yaml import YAML
 from spinal_surgery import PACKAGE_DIR
 from spinal_surgery.lab.kinematics.gt_motion_generator import GTMotionGenerator, GTDiscreteMotionGenerator
+from spinal_surgery.lab.kinematics.vertebra_viewer import VertebraViewer
 import cProfile
 import wandb
 
@@ -69,16 +70,22 @@ INIT_STATE_BED = AssetBaseCfg.InitialStateCfg(
     rot=(0.5, 0.5, 0.5, 0.5)
 )
 scale_bed = bed_cfg['scale']
-# use stl: Totalsegmentator_dataset_v2_subset_body_contact
+# use stl: selected_dataset_body_contact
 human_usd_list = [
-            f"{ASSETS_DATA_DIR}/HumanModels/Totalsegmentator_dataset_v2_subset_body_from_urdf/" + p_id for p_id in patient_cfg['id_list']
+            f"{ASSETS_DATA_DIR}/HumanModels/selected_dataset_body_from_urdf/" + p_id for p_id in patient_cfg['id_list']
 ]
 human_stl_list = [
-            f"{ASSETS_DATA_DIR}/HumanModels/Totalsegmentator_dataset_v2_subset_stl/" + p_id for p_id in patient_cfg['id_list']
+            f"{ASSETS_DATA_DIR}/HumanModels/selected_dataset_stl/" + p_id for p_id in patient_cfg['id_list']
 ]
 human_raw_list = [
-            f"{ASSETS_DATA_DIR}/HumanModels/Totalsegmentator_dataset_v2_subset/" + p_id for p_id in patient_cfg['id_list']
+            f"{ASSETS_DATA_DIR}/HumanModels/selected_dataset/" + p_id for p_id in patient_cfg['id_list']
 ]
+
+target_anatomy = patient_cfg['target_anatomy']
+target_stl_file_list = [f"{ASSETS_DATA_DIR}/HumanModels/selected_dataset_stl/" + p_id + '/' + str(target_anatomy) + '.stl' 
+                        for p_id in patient_cfg['id_list']]
+target_traj_file_list = [f"{ASSETS_DATA_DIR}/HumanModels/selected_dataset_stl/" +
+                          p_id + '/' + 'standard_right_traj_' + str(target_anatomy)[-2:] + '.stl' for p_id in patient_cfg['id_list']]
 
 usd_file_list = [human_file + "/combined_wrapwrap/combined_wrapwrap.usd" for human_file in human_usd_list]
 label_map_file_list = [human_file + "/combined_label_map.nii.gz" for human_file in human_stl_list]
@@ -124,7 +131,7 @@ class roboticUSEnv(DirectRLEnv):
         self.US_ee_jacobi_idx = self.robot_entity_cfg.body_ids[-1]
 
         # define ik controllers
-        ik_params = {"lambda_val": 0.01}
+        ik_params = {"lambda_val": 0.1}
         pose_diff_ik_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls", ik_params=ik_params)
         self.pose_diff_ik_controller = DifferentialIKController(pose_diff_ik_cfg, self.scene.num_envs, device=self.sim.device)
 
@@ -182,6 +189,7 @@ class roboticUSEnv(DirectRLEnv):
         motion_plan_cfg = scene_cfg['motion_planning']
         self.max_action = torch.tensor(scene_cfg['action']['max_action'], device=self.sim.device).reshape((1, -1))
         self.goal_cmd_pose = torch.tensor(motion_plan_cfg['patient_xz_goal'], device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
+        self.use_vertebra_goal = motion_plan_cfg['use_vertebra_goal']
         self.gt_motion_generator = GTDiscreteMotionGenerator(
             goal_cmd_pose=self.goal_cmd_pose,
             scale=torch.tensor(motion_plan_cfg['scale'], device=self.sim.device),
@@ -190,6 +198,16 @@ class roboticUSEnv(DirectRLEnv):
             surface_normal_list=self.US_slicer.surface_normal_list,
             label_res=label_res,
             US_height=self.US_slicer.height,
+        )
+
+        self.vertebra_viewer = VertebraViewer(
+            self.scene.num_envs,
+            len(human_usd_list),
+            target_stl_file_list,
+            target_traj_file_list,
+            self.sim_cfg['vis_us'],
+            label_res,
+            self.sim.device
         )
         
         # change observation space to image 
@@ -215,6 +233,27 @@ class roboticUSEnv(DirectRLEnv):
         self.action_scale = torch.tensor(scene_cfg['action']['scale'], 
                                          device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
         self.w_act = scene_cfg['reward']['w_action']
+
+        self.single_action_space = gym.spaces.Box(
+            low=-(self.max_action[0, :] / self.action_scale[0, :]).cpu().numpy(),
+            high=(self.max_action[0, :] / self.action_scale[0, :]).cpu().numpy(),
+            shape=(self.cfg.action_space,),
+            dtype=np.float32,
+        )
+
+    
+    def get_US_target_pose(self):
+        # compute position change
+        vertebra_to_US_2d_pos = torch.tensor(scene_cfg['motion_planning']['vertebra_to_US_2d_pos']).to(self.sim.device)
+        
+        vertebra_2d_pos = self.vertebra_viewer.human_to_ver_per_envs[:, [0, 2]]
+        US_target_2d_pos = vertebra_2d_pos + vertebra_to_US_2d_pos.unsqueeze(0)
+
+        US_target_2d_angle = self.goal_cmd_pose[:, 2:3] * torch.ones_like(vertebra_2d_pos[:, 0:1])
+
+        US_target_2d = torch.cat([US_target_2d_pos, US_target_2d_angle], dim=-1)
+
+        self.goal_cmd_pose = US_target_2d
 
 
     def _setup_scene(self):
@@ -519,7 +558,14 @@ class roboticUSEnv(DirectRLEnv):
         # set joint positions
         self._move_towards_target(self.US_slicer.human_to_ee_target_pos, self.US_slicer.human_to_ee_target_quat)
 
+        if hasattr(self, 'total_reward'):
+            wandb.log({'total_reward': self.total_reward.mean().item()})
+            wandb.log({'distance_to_goal': self.distance_to_goal.mean().item()})
+            
         # init distance to goal
+        if self.use_vertebra_goal:
+            self.get_US_target_pose()
+
         cur_human_ee_pos, cur_human_ee_quat = subtract_frame_transforms(
             self.world_to_human_pos, self.world_to_human_rot, 
             self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
@@ -528,8 +574,6 @@ class roboticUSEnv(DirectRLEnv):
         self.distance_to_goal = torch.norm(self.cur_cmd_pose[:, 0:2] - self.goal_cmd_pose[:, 0:2], dim=-1) * 0.03
         self.distance_to_goal += torch.norm(self.cur_cmd_pose[:, 2:3] - self.goal_cmd_pose[:, 2:3], dim=-1)
 
-        if hasattr(self, 'total_reward'):
-            wandb.log({'total_reward': self.total_reward.mean().item()})
         self.total_reward = torch.zeros(self.scene.num_envs, device=self.sim.device)
 
         # record infor

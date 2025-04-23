@@ -81,8 +81,8 @@ def process_patients(root_dir, output_root, color=(0.7, 0.7, 0.7, 1.0)):
             print(f"❌ No STL file found for patient: {patient}")
 
 # Example usage
-input_root = "/home/yunkao/git/IsaacLabExtensionTemplate/exts/spinal_surgery/spinal_surgery/assets/data/HumanModels/Totalsegmentator_dataset_v2_subset_stl"  # Replace with actual path
-output_root = "/home/yunkao/git/IsaacLabExtensionTemplate/exts/spinal_surgery/spinal_surgery/assets/data/HumanModels/Totalsegmentator_dataset_v2_subset_stl"  # Replace with actual path
+input_root = "/home/yunkao/git/IsaacLabExtensionTemplate/source/spinal_surgery/spinal_surgery/assets/data/HumanModels/selected_dataset_stl"  # Replace with actual path
+output_root = "/home/yunkao/git/IsaacLabExtensionTemplate/source/spinal_surgery/spinal_surgery/assets/data/HumanModels/selected_dataset_stl"  # Replace with actual path
 
 custom_color = (0.7, 0.5, 0.2, 0.7)  # Example: Red color with full opacity
 

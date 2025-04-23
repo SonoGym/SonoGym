@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # Path to the Python script
-PYTHON_SCRIPT="/home/yunkao/git/IsaacLabExtensionTemplate/scripts/convert_urdf_to_usd.py"
+PYTHON_SCRIPT="/home/yunkao/git/IsaacLabExtensionTemplate/tools/convert_urdf_to_usd.py"
 
 # Base directory for input files
-INPUT_ROOT="/home/yunkao/git/IsaacLabExtensionTemplate/exts/spinal_surgery/spinal_surgery/assets/data/HumanModels/Totalsegmentator_dataset_v2_subset_stl"
+INPUT_ROOT="/home/yunkao/git/IsaacLabExtensionTemplate/source/spinal_surgery/spinal_surgery/assets/data/HumanModels/selected_dataset_stl"
 
 # Output directory
-OUTPUT_ROOT="/home/yunkao/git/IsaacLabExtensionTemplate/exts/spinal_surgery/spinal_surgery/assets/data/HumanModels/Totalsegmentator_dataset_v2_subset_body_from_urdf"
+OUTPUT_ROOT="/home/yunkao/git/IsaacLabExtensionTemplate/source/spinal_surgery/spinal_surgery/assets/data/HumanModels/selected_dataset_body_from_urdf"
 
 # Ensure the output directory exists
 mkdir -p "$OUTPUT_DIR"
@@ -29,7 +29,7 @@ find "$INPUT_ROOT" -type f | while read -r input_file; do
         
         # Run the Python script
         echo "Processing $input_file -> $output_file"
-        python3 "$PYTHON_SCRIPT" "$input_file" "$output_file" --make-instanceable
+        python3 "$PYTHON_SCRIPT" "$input_file" "$output_file"
         
         # Check if the Python script executed successfully
         if [ $? -ne 0 ]; then

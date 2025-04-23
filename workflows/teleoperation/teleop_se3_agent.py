@@ -16,9 +16,9 @@ parser = argparse.ArgumentParser(description="Keyboard teleoperation for Isaac L
 parser.add_argument(
     "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
 )
-parser.add_argument("--num_envs", type=int, default=10, help="Number of environments to simulate.")
+parser.add_argument("--num_envs", type=int, default=64, help="Number of environments to simulate.")
 parser.add_argument("--teleop_device", type=str, default="keyboard", help="Device for interacting with environment")
-parser.add_argument("--task", type=str, default='Isaac-robot-US-guidance-v0', help="Name of the task.")
+parser.add_argument("--task", type=str, default='Isaac-robot-US-reconstruction-v0', help="Name of the task.")
 parser.add_argument("--sensitivity", type=float, default=5.0, help="Sensitivity factor.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -34,8 +34,6 @@ simulation_app = app_launcher.app
 
 import gymnasium as gym
 import torch
-
-import omni.log
 
 from isaaclab.devices import Se3Gamepad, Se3Keyboard, Se3SpaceMouse
 from isaaclab.managers import TerminationTermCfg as DoneTerm
@@ -135,10 +133,10 @@ def main():
 
 if __name__ == "__main__":
     # run the main function
-    profiler = cProfile.Profile()
-    profiler.enable()
+    # profiler = cProfile.Profile()
+    # profiler.enable()
     main()
-    profiler.disable()
-    profiler.dump_stats("main_stats.prof")
+    # profiler.disable()
+    # profiler.dump_stats("main_stats.prof")
     # close sim app
     simulation_app.close()

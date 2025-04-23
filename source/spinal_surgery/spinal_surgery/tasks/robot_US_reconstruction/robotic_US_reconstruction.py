@@ -18,6 +18,7 @@ import time
 import numpy as np
 from collections.abc import Sequence
 import gymnasium as gym
+import wandb
 
 ##
 # Pre-defined configs
@@ -68,21 +69,21 @@ INIT_STATE_BED = AssetBaseCfg.InitialStateCfg(
     rot=(0.5, 0.5, 0.5, 0.5)
 )
 scale_bed = bed_cfg['scale']
-# use stl: Totalsegmentator_dataset_v2_subset_body_contact
+# use stl: selected_dataset_body_contact
 human_usd_list = [
-            f"{ASSETS_DATA_DIR}/HumanModels/Totalsegmentator_dataset_v2_subset_body_from_urdf/" + p_id for p_id in patient_cfg['id_list']
+            f"{ASSETS_DATA_DIR}/HumanModels/selected_dataset_body_from_urdf/" + p_id for p_id in patient_cfg['id_list']
 ]
 human_stl_list = [
-            f"{ASSETS_DATA_DIR}/HumanModels/Totalsegmentator_dataset_v2_subset_stl/" + p_id for p_id in patient_cfg['id_list']
+            f"{ASSETS_DATA_DIR}/HumanModels/selected_dataset_stl/" + p_id for p_id in patient_cfg['id_list']
 ]
 human_raw_list = [
-            f"{ASSETS_DATA_DIR}/HumanModels/Totalsegmentator_dataset_v2_subset/" + p_id for p_id in patient_cfg['id_list']
+            f"{ASSETS_DATA_DIR}/HumanModels/selected_dataset/" + p_id for p_id in patient_cfg['id_list']
 ]
 
 target_anatomy = scene_cfg['reconstruction']['target_vertebra']
-target_stl_file_list = [f"{ASSETS_DATA_DIR}/HumanModels/Totalsegmentator_dataset_v2_subset_stl/" + p_id + '/' + str(target_anatomy) + '.stl' 
+target_stl_file_list = [f"{ASSETS_DATA_DIR}/HumanModels/selected_dataset_stl/" + p_id + '/' + str(target_anatomy) + '.stl' 
                         for p_id in patient_cfg['id_list']]
-target_traj_file_list = [f"{ASSETS_DATA_DIR}/HumanModels/Totalsegmentator_dataset_v2_subset_stl/" +
+target_traj_file_list = [f"{ASSETS_DATA_DIR}/HumanModels/selected_dataset_stl/" +
                           p_id + '/' + 'standard_right_traj_' + str(target_anatomy)[-2:] + '.stl' for p_id in patient_cfg['id_list']]
 
 usd_file_list = [human_file + "/combined_wrapwrap/combined_wrapwrap.usd" for human_file in human_usd_list]
@@ -555,6 +556,8 @@ class roboticUSRecEnv(DirectRLEnv):
         self.human_to_ee_pos, self.human_to_ee_quat = subtract_frame_transforms(
             self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
         )
+        if hasattr(self, 'total_reward'):
+            wandb.log({'total_reward': self.total_reward.mean().item()})
         self.total_reward = torch.zeros(self.scene.num_envs, device=self.sim.device)
         self.total_length = torch.zeros(self.scene.num_envs, device=self.sim.device)
 

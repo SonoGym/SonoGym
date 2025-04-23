@@ -16,8 +16,10 @@ parser = argparse.ArgumentParser(description="run expert policy based on privile
 parser.add_argument(
     "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
 )
-parser.add_argument("--num_envs", type=int, default=20, help="Number of environments to simulate.")
+parser.add_argument("--num_envs", type=int, default=32, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default='Isaac-robot-US-guided-surgery-v0', help="Name of the task.")
+parser.add_argument("--num_traj", type=int, default=768, help="Number of environments to simulate.")
+parser.add_argument("--if_record", type=bool, default=False, help="if record data to lerobot")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -39,6 +41,11 @@ import cProfile
 import wandb
 from spinal_surgery.lab.controllers.expert_guidance import ExpertGuidance
 from spinal_surgery.lab.controllers.expert_surgery import ExpertSurgery
+from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
+from spinal_surgery.tasks.robot_US_guidance.cfgs.lerobot_cfg import *
+from spinal_surgery.tasks.robot_US_guided_surgery.cfgs.lerobot_cfg import *
+import tqdm
+import numpy as np
 
 
 def main():
@@ -55,21 +62,95 @@ def main():
     # create expert
     if args_cli.task == "Isaac-robot-US-guidance-v0":
         expert = ExpertGuidance(env.max_action, env.action_scale, [0.02, 0.02, 0.3], env.sim.device)
+        features = GUIDANCE_FEATURES
     elif args_cli.task == "Isaac-robot-US-guided-surgery-v0":
-        expert = ExpertSurgery(env.max_action, env.action_scale, [10.0, 10.0, 10.0, 0.1, 0.1, 0.1], env.sim.device)
+        expert = ExpertSurgery(env.max_action, env.action_scale, [20.0, 20.0, 20.0, 0.1, 0.1, 0.1], env.sim.device)
+        features = SURGERY_FEATURES
     else:
         raise ValueError(f"Unsupported task: {args_cli.task}")
+    
+    if args_cli.if_record:
+        # create lerobot dataset
+        lerobot_dataset = LeRobotDataset.create(
+            repo_id="yunkao/uspine",
+            fps=int(1 / env_cfg.sim.dt),
+            root="/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/" + args_cli.task,
+            robot_type="kuka-med",
+            features=features,
+        )
 
-    # reset environment
-    obs, info = env.reset()
+    for ep_index in tqdm.tqdm(range(args_cli.num_traj // args_cli.num_envs)):
 
-    # simulate environment
-    while simulation_app.is_running():
-        # run everything in inference mode
-        with torch.inference_mode():
+        # reset environment
+        obs, info = env.reset()
+        time_out = False
+
+        stacked_frame_list = []
+        while time_out is False:
+            # run everything in inference mode
             actions = expert.get_action(info)
             # apply actions
             obs, reward, term, time_out, info = env.step(actions)
+
+            # record data
+            if args_cli.task == "Isaac-robot-US-guidance-v0":
+                observation = obs['policy'].cpu().numpy()
+                action = actions.cpu().numpy()
+                stacked_frame = {
+                    "observation": observation,
+                    "action": action,
+                    'task': GUIDANCE_TASK,
+                }
+                stacked_frame_list.append(stacked_frame)
+            else:
+                obs_img = obs['policy']['image'].squeeze(0).cpu().numpy()
+                obs_pos = obs['policy']['pos'].squeeze(0).cpu().numpy()
+                obs_quat = obs['policy']['quat'].squeeze(0).cpu().numpy()
+                action = actions.squeeze(0).cpu().numpy()
+                stacked_frame = {
+                    "observation.ultrasound": obs_img,
+                    "observation.pos": obs_pos,
+                    "observation.quat": obs_quat,
+                    "action": action,
+                    'task': SURGERY_TASK,
+                }
+                stacked_frame_list.append(stacked_frame)
+
+            # change time_out to boolean
+            time_out = torch.any(time_out).item()
+
+        if args_cli.if_record:
+            for ep in range(args_cli.num_envs):
+                for i in range(len(stacked_frame_list)):
+                    if args_cli.task == "Isaac-robot-US-guidance-v0":
+                        frame = {
+                            "observation.images": np.repeat(stacked_frame_list[i]['observation'][ep, ...], 3, axis=0).transpose(1, 2, 0),
+                            "observation.state": np.zeros((2,), dtype=np.float32),
+                            "action": stacked_frame_list[i]['action'][ep, :],
+                            'task': GUIDANCE_TASK,
+                        }
+                    else:
+                        state = np.concatenate(
+                            (stacked_frame_list[i]['observation.pos'][ep, :],
+                            stacked_frame_list[i]['observation.quat'][ep, :]), axis=0
+                        )
+                        video = stacked_frame_list[i]['observation.ultrasound'][ep, ...]  # (25, 50, 37)
+                        video = video.reshape(5, 5, 50, 37)  # (5, 5, 50, 37)
+                        video = video.transpose(1, 2, 0, 3)  # (5, 50, 37, 5)
+                        video = video.reshape(5 * 50, 37 * 5)[:, :, None]  # (250, 185, 1)
+                        video = np.repeat(video, 3, axis=-1)  # (250, 185, 3)
+                        frame = {
+                            "observation.images": video,
+                            "observation.state": state,
+                            "action": stacked_frame_list[i]['action'][ep, :],
+                            'task': SURGERY_TASK,
+                        }
+                    # add to frame
+                    lerobot_dataset.add_frame(frame)
+                # save episode
+                lerobot_dataset.save_episode()
+                lerobot_dataset.clear_episode_buffer()
+                    
 
     # close the simulator
     env.close()

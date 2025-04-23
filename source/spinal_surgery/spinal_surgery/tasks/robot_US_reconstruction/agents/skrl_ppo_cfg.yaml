@@ -65,8 +65,8 @@ memory:
 agent:
   class: PPO
   rollouts: 16
-  learning_epochs: 5
-  mini_batches: 4
+  learning_epochs: 3
+  mini_batches: 32
   discount_factor: 0.99
   lambda: 0.95
   learning_rate: 3.0e-04
@@ -90,8 +90,8 @@ agent:
   time_limit_bootstrap: False
   # logging and checkpoint
   experiment:
-    directory: "reconstruction/rollout_16_epoch_5_mini_4_pos_1e-4_only_above"
-    experiment_name: ""
+    directory: "reconstruction"
+    experiment_name: "PPO"
     write_interval: auto
     checkpoint_interval: auto
 

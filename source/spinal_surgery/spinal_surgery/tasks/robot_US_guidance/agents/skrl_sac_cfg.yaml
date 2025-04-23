@@ -125,19 +125,19 @@ memory:
 
 agent:
   class: SAC
-  rollouts: 1000
-  gradient_steps: 1           # gradient steps
-  batch_size: 32              # training batch size
+  rollouts: 64
+  gradient_steps: 2           # gradient steps
+  batch_size: 1024              # training batch size
   discount_factor: 0.99       # discount factor (gamma)
   polyak: 0.005               # soft update hyperparameter (tau)
   actor_learning_rate: 0.0001   # actor learning rate
   critic_learning_rate: 0.001  # critic learning rate
-  random_timesteps: 0         # random exploration steps
-  learning_starts: 100          # learning starts after this many steps
-  grad_norm_clip: 0           # clipping coefficient for the norm of the gradients
+  random_timesteps: 1000         # random exploration steps
+  learning_starts: 1000          # learning starts after this many steps
+  grad_norm_clip: 1.0           # clipping coefficient for the norm of the gradients
   learn_entropy: True         # learn entropy
   entropy_learning_rate: 0.001 # entropy learning rate
-  initial_entropy_value: 0.2  # initial entropy value
+  initial_entropy_value: 0.002  # initial entropy value
   mixed_precision: False      # enable automatic mixed precision for higher performance
   experiment:
     directory: US_guidance          # experiment's parent directory

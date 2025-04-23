@@ -15,8 +15,6 @@ parameters:
     values: [0.00001, 0.0001, 0.001]
   agent.agent.entropy_learning_rate:
     values: [0.001, 0.0001, 0.00001]
-  agent.agent.gradient_steps:
-    values: [1, 8, 32]
 
 command:
   - /isaac-sim/python.sh
@@ -24,4 +22,5 @@ command:
   - "--headless"
   - "--task=Isaac-robot-US-guided-surgery-v0"
   - "--algorithm=SAC"
+  - "--num_envs=32"
   - ${args_no_hyphens}

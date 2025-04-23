@@ -11,7 +11,7 @@ robot_drill:
 patient:
   pos: [0.2, -0.2, 0.7] # 0.7
   euler_yxz: [-90.0, -90.0, 0.0]
-  id_list: ['s0010'] # 's0010', 's0014', 's0015'
+  id_list: ['s0015', 's0024', 's0029', 's0010', 's0014'] #, 's0015', 's0024', 's0028', 's0029', 's0030'] # 's0010', 's0014', 's0015'
   label_res: 0.0015 # m
   target_anatomy: 'vertebrae_L4'
 
@@ -21,7 +21,7 @@ bed:
   scale: 0.0004
 
 motion_planning:
-  joint_pos_rand_max: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # [0.3, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  joint_pos_rand_max: [0.2, 0.2, 0.1, 0.1, 0.1, 0.1, 0.1] # [0.3, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1] 
   vertebra_to_US_2d_pos: [-25.0, 0.0]
   US_roll_adj: -0.4
   vertebra_to_US_rand_max: 10.0
@@ -32,19 +32,19 @@ observation:
   3D: True
   downsample: 4
   mode: 'US' # 'seg', 'CT', 'US'
-  scale: 0.1 # 0.1, 0.0005, 0.003
+  scale: 0.02 # 0.1, 0.0005, 0.1
 
 action: 
   mode: 'continuous' # 'discrete', 'continuous'
-  scale: [0.1, 0.1, 0.1, 1.0, 1.0, 1.0]
-  max_action: [0.01, 0.01, 0.01, 0.1, 0.1, 0.1]
+  scale: [0.1, 0.1, 0.1, 1.0, 1.0, 1.0]  # [0.1, 0.1, 0.1, 1.0, 1.0, 1.0]
+  max_action: [0.03, 0.03, 0.03, 0.1, 0.1, 0.1]
 
 reward:
   safe_height: 0.1 # 10 cm
   w_pos: 10.0
-  w_insertion: 100.0
+  w_insertion: 200.0 # 100
   w_angle: 1.0
-  w_cost: 20.0
+  w_cost: 20 # 
 
 
 sim:

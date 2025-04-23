@@ -4,7 +4,7 @@ from spinal_surgery.lab.sensors.ultrasound.simulate_US_network import USSimulato
 import cv2
 import numpy as np
 import torch
-
+from matplotlib import pyplot as plt
 
 class USSlicer(LabelImgSlicer):
     # Class: US slicer
@@ -234,10 +234,21 @@ class USSlicer(LabelImgSlicer):
 
             combined_img_np = combined_US_img.cpu().numpy()
 
+            # if self.sim_mode=='conv':
+            #     cv2.imshow("US Image Update", ((combined_img_np.T / 20)*255).astype(np.uint8))
+            # else:
+            #     cv2.imshow("US Image Update", (combined_img_np.T / np.max(combined_img_np)*255).astype(np.uint8))
+            # cv2.waitKey(0)
+            # cv2.destroyAllWindows()
             if self.sim_mode=='conv':
-                cv2.imshow("US Image Update", combined_img_np.T / 20)
+                plt.figure(2, figsize=(first_n*3, 5))
+                plt.clf()
+                plt.imshow((combined_img_np.T / 30*255).astype(np.uint8),cmap='gray')
+                plt.pause(0.0001)
             else:
-                cv2.imshow("US Image Update", combined_img_np.T / np.max(combined_img_np))
-            cv2.waitKey(1)
+                plt.figure(2, figsize=(first_n*3, 5))
+                plt.clf()
+                plt.imshow((combined_img_np.T / np.max(combined_img_np)*255).astype(np.uint8),cmap='gray')
+                plt.pause(0.0001)
         
 

@@ -9,7 +9,7 @@ parser = argparse.ArgumentParser(description="Train an RL agent with skrl.")
 parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
 parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
 parser.add_argument("--video_interval", type=int, default=2000, help="Interval between video recordings (in steps).")
-parser.add_argument("--num_envs", type=int, default=16, help="Number of environments to simulate.")
+parser.add_argument("--num_envs", type=int, default=8, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default='Isaac-robot-US-guided-surgery-v0', help="Name of the task.")
 parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
 parser.add_argument(
@@ -65,7 +65,7 @@ from tianshou.utils.net.common import Net
 from tianshou.utils.net.continuous import ActorProb
 from torch.distributions import Independent, Normal
 
-from fsrl.config.ppol_cfg import (
+from fsrl.config.cpo_cfg import (
     Bullet1MCfg,
     Bullet5MCfg,
     Bullet10MCfg,
@@ -76,7 +76,7 @@ from fsrl.config.ppol_cfg import (
     TrainCfg,
 )
 from fsrl.data import FastCollector
-from fsrl.policy import PPOLagrangian
+from fsrl.policy import CPO
 from fsrl.trainer import OnpolicyTrainer
 from fsrl.utils import TensorboardLogger, WandbLogger
 from fsrl.utils.exp_util import auto_name, seed_all
@@ -134,7 +134,7 @@ TASK_TO_CFG = {
 }
 
 
-@hydra_task_config(args_cli.task, "fsrl_cfg_entry_point")
+@hydra_task_config(args_cli.task, "fsrl_cpo_cfg_entry_point")
 def train(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: dict):
     # set seed and computing
     # args = TrainCfg()
@@ -226,28 +226,23 @@ def train(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, age
 
     train_envs = FsrlEnvWrapper(train_envs)
     
-    policy = PPOLagrangian(
+    policy = CPO(
         actor,
         critic,
         optim,
         dist,
         logger=logger,
         target_kl=args.target_kl,
-        vf_coef=args.vf_coef,
-        max_grad_norm=args.max_grad_norm,
+        backtrack_coeff=args.backtrack_coeff,
+        damping_coeff=args.damping_coeff,
+        max_backtracks=args.max_backtracks,
+        optim_critic_iters=args.optim_critic_iters,
+        l2_reg=args.l2_reg,
         gae_lambda=args.gae_lambda,
-        eps_clip=args.eps_clip,
-        dual_clip=args.dual_clip,
-        value_clip=args.value_clip,
         advantage_normalization=args.norm_adv,
-        recompute_advantage=args.recompute_adv,
-        use_lagrangian=args.use_lagrangian,
-        lagrangian_pid=args.lagrangian_pid,
         cost_limit=args.cost_limit,
-        rescaling=args.rescaling,
         gamma=args.gamma,
         max_batchsize=args.max_batchsize,
-        reward_normalization=args.rew_norm,
         deterministic_eval=args.deterministic_eval,
         action_scaling=args.action_scaling,
         action_bound_method=args.action_bound_method,

@@ -1,0 +1,31 @@
+# Configuration for a wandb sweep
+# Running the following command under the hood:
+
+program: scripts/reinforcement_learning/skrl/train_ppol.py
+description: "surgery_PPOl_sweep_cost_100"
+name: surgery_PPOl_sweep_cost_100
+method: bayes
+metric:
+  goal: maximize
+  name: total_reward
+parameters:
+  agent.lagrangian_pid:
+    values: [
+      [0.05, 0.0005, 0.1], 
+      [0.02, 0.0005, 0.1],
+      [0.1, 0.0005, 0.1],
+      [0.05, 0.0005, 0.05],
+      [0.05, 0.0005, 0.2], 
+      [0.05, 0.0, 0.1], 
+      [0.02, 0.0, 0.1],
+      [0.1, 0.0, 0.1],
+      [0.05, 0.0, 0.05],
+      [0.05, 0.0, 0.2],
+    ]
+
+command:
+  - /isaac-sim/python.sh
+  - ${program}
+  - "--headless"
+  - "--task=Isaac-robot-US-guided-surgery-v0"
+  - ${args_no_hyphens}
