@@ -17,8 +17,8 @@ parser.add_argument(
     "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
 )
 parser.add_argument("--num_envs", type=int, default=32, help="Number of environments to simulate.")
-parser.add_argument("--task", type=str, default='Isaac-robot-US-guided-surgery-v0', help="Name of the task.")
-parser.add_argument("--num_traj", type=int, default=768, help="Number of environments to simulate.")
+parser.add_argument("--task", type=str, default='Isaac-robot-US-guidance-v0', help="Name of the task.")
+parser.add_argument("--num_traj", type=int, default=2048, help="Number of environments to simulate.")
 parser.add_argument("--if_record", type=bool, default=False, help="if record data to lerobot")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
