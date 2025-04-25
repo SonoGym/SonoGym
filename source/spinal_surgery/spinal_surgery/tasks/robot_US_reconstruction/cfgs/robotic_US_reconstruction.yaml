@@ -5,7 +5,7 @@ robot:
 patient:
   pos: [0.2, -0.2, 0.7]
   euler_yxz: [-90.0, -90.0, 0.0]
-  id_list: ['s0015', 's0024', 's0029', 's0010', 's0014'] # 's0010', 's0014', 's0015'
+  id_list: ['s0015', 's0004', 's0029', 's0010', 's0006'] # 's0010', 's0014', 's0015'
   label_res: 0.0015 # m'
 
 bed:
@@ -33,8 +33,8 @@ reconstruction:
 reward:
   incremental_cov: 0.01
   action_length:
-    w_pos: 0.0001
-    w_angle: 0.01
+    w_pos: 0.0001 # 1e-4
+    w_angle: 0.01 # 1e-2
 
 action: 
   scale: [2, 2, 0.1, 0.1]
@@ -46,6 +46,6 @@ sim:
   patient_xz_init_range: [[100, 70, 1.5], [180, 200, 3.5]]
   if_use_ct: True
   ct_range: [-300, 3000]
-  vis_us: False
-  vis_rec: False
+  vis_us: True
+  vis_rec: True
   vis_seg_map: False

@@ -92,8 +92,9 @@ from isaaclab_rl.skrl import SkrlVecEnvWrapper
 
 import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils.hydra import hydra_task_config
-from spinal_surgery.lab.agents.skrl_ppol_agent import PPOLagrangian, PPOL_DEFAULT_CONFIG
-from spinal_surgery.lab.agents.skrl_actor_critic import StochasticActor, Critic
+from spinal_surgery.lab.agents.skrl_safety_filter_agent import SafetyFilterPPO, SPPO_DEFAULT_CONFIG
+from spinal_surgery.lab.agents.skrl_safety_filter_trainer import SafetyFilterSequentialTrainer
+from spinal_surgery.lab.agents.skrl_actor_critic import StochasticActor, Critic, QNet
 import wandb
 from skrl.trainers.torch import SequentialTrainer
 from skrl.memories.torch import RandomMemory
@@ -103,7 +104,7 @@ from skrl.resources.preprocessors.torch.running_standard_scaler import RunningSt
 # PLACEHOLDER: Extension template (do not remove this comment)
 
 # config shortcuts
-agent_cfg_entry_point = "skrl_ppol_cfg_entry_point"
+agent_cfg_entry_point = "skrl_sppo_cfg_entry_point"
 
 
 def update_config(default_cfg, new_cfg):
@@ -135,7 +136,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # set the agent and environment seed from command line
     # note: certain randomization occur in the environment initialization so we set the seed here
-    agent_cfg = update_config(PPOL_DEFAULT_CONFIG, agent_cfg)
+    agent_cfg = update_config(SPPO_DEFAULT_CONFIG, agent_cfg)
     agent_cfg["seed"] = args_cli.seed if args_cli.seed is not None else agent_cfg["seed"]
     env_cfg.seed = agent_cfg["seed"]
 
@@ -190,6 +191,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     models["policy"] = StochasticActor(env.observation_space, env.action_space, device, clip_actions=False)
     models["value"] = Critic(env.observation_space, env.action_space, device)
     models["cost_value"] = Critic(env.observation_space, env.action_space, device)
+    models["cost_critic"] = QNet(env.observation_space, env.action_space, device)
+    models["target_cost_value"] = Critic(env.observation_space, env.action_space, device)
     if agent_cfg['learning_rate_scheduler'] == "KLAdaptiveLR":
         agent_cfg["learning_rate_scheduler"] = KLAdaptiveLR
     if agent_cfg['value_preprocessor'] == "RunningStandardScaler":
@@ -199,7 +202,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # Instantiate a RandomMemory (without replacement) as experience replay memory
     memory = RandomMemory(memory_size=agent_cfg['rollouts'], num_envs=env.num_envs, device=device, replacement=False)
 
-    ppol_agent = PPOLagrangian(
+    ppol_agent = SafetyFilterPPO(
         models=models,
         memory=memory,
         cfg=agent_cfg,
@@ -210,7 +213,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # Configure and instantiate the RL trainer
     cfg_trainer = {"timesteps": 1000000, "headless": True}
-    trainer = SequentialTrainer(cfg=cfg_trainer, env=env, agents=ppol_agent)
+    trainer = SafetyFilterSequentialTrainer(cfg=cfg_trainer, env=env, agents=ppol_agent)
 
     # start training
     trainer.train()

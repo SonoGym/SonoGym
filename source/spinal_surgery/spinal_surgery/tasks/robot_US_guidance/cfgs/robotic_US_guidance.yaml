@@ -5,7 +5,7 @@ robot:
 patient:
   pos: [0.2, -0.45, 1.0]
   euler_yxz: [-90.0, -90.0, 0.0]
-  id_list: ['s0015', 's0024', 's0029', 's0010', 's0014'] # 's0010', 's0014', 's0015'
+  id_list: ['s0010'] # 's0010', 's0014', 's0015'
   label_res: 0.0015 # m
   target_anatomy: 'vertebrae_L4'
 
@@ -15,7 +15,7 @@ bed:
   scale: 0.001
 
 motion_planning:
-  patient_xz_goal: [150, 170, 1.57]
+  patient_xz_goal: [150, 170, 3.14]
   use_vertebra_goal: True
   vertebra_to_US_2d_pos: [0.0, 0.0]
   scale: [[5, 5, 0.1]]

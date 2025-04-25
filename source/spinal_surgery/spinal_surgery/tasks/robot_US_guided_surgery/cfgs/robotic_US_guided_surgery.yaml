@@ -11,7 +11,7 @@ robot_drill:
 patient:
   pos: [0.2, -0.2, 0.7] # 0.7
   euler_yxz: [-90.0, -90.0, 0.0]
-  id_list: ['s0015', 's0024', 's0029', 's0010', 's0014'] #, 's0015', 's0024', 's0028', 's0029', 's0030'] # 's0010', 's0014', 's0015'
+  id_list: ['s0015'] #, 's0004', 's0029', 's0010', 's0006'] #, 's0015', 's0024', 's0028', 's0029', 's0030'] # 's0010', 's0014', 's0015'
   label_res: 0.0015 # m
   target_anatomy: 'vertebrae_L4'
 
@@ -44,7 +44,7 @@ reward:
   w_pos: 10.0
   w_insertion: 200.0 # 100
   w_angle: 1.0
-  w_cost: 20 # 
+  w_cost: 1 # 
 
 
 sim:

@@ -21,7 +21,7 @@ from spinal_surgery.lab.agents.lagrangian_optimizer import LagrangianOptimizer
 import wandb
 
 
-PPOL_DEFAULT_CONFIG = {
+SPPO_DEFAULT_CONFIG = {
     "rollouts": 16,                 # number of rollouts before updating
     "learning_epochs": 8,           # number of learning epochs during each update
     "mini_batches": 2,              # number of mini batches during each learning epoch
@@ -57,11 +57,8 @@ PPOL_DEFAULT_CONFIG = {
     "time_limit_bootstrap": False,  # bootstrap at timeout termination (episode truncation)
 
     "cost_limit": 2.0,            # cost limit for Lagrangian multiplier optimization
-    "use_lagrangian": True,        # whether to use Lagrangian
-    "lagrangian_pid": (0.05, 0.0005, 0.1),  # PID parameters for Lagrangian
-    "rescaling": True,             # whether to rescale the Lagrangian multiplier
-    "state_dependence": True,        # whether to use state-dependent Lagrangian multiplier
-    "large_scale": 1,
+    "polyak": 0.01,
+    "learn_cost": True,
 
     "mixed_precision": False,       # enable automatic mixed precision for higher performance
 
@@ -79,7 +76,7 @@ PPOL_DEFAULT_CONFIG = {
 }
 
 
-class PPOLagrangian(PPO):
+class SafetyFilterPPO(PPO):
     def __init__(self,
                  models: Dict[str, Model],
                  memory: Optional[Union[Memory, Tuple[Memory]]] = None,
@@ -105,7 +102,7 @@ class PPOLagrangian(PPO):
         :param cfg: Configuration dictionary
         :type cfg: dict
         """
-        _cfg = copy.deepcopy(PPOL_DEFAULT_CONFIG)
+        _cfg = copy.deepcopy(SPPO_DEFAULT_CONFIG)
         _cfg.update(cfg if cfg is not None else {})
         super().__init__(models=models,
                          memory=memory,
@@ -122,37 +119,37 @@ class PPOLagrangian(PPO):
         # =======================================================================
         # get cost value function
         self.cost_value = self.models.get("cost_value", None)
+        self.cost_critic = self.models.get("cost_critic", None)
+        self.target_cost_value = self.models.get("target_cost_value", None)
+
+        # checkpoint models
+        self.checkpoint_modules["cost_value"] = self.cost_value
+        self.checkpoint_modules["cost_critic"] = self.cost_critic
+        self.checkpoint_modules["target_cost_value"] = self.target_cost_value
 
         # additional attributes
         self._cost_value_preprocessor = self.cfg["cost_value_preprocessor"]
-        self._use_lagrangian = self.cfg["use_lagrangian"]
-        self._lagrangian_pid = self.cfg["lagrangian_pid"]
-        self._rescaling = self.cfg["rescaling"]
         self._cost_limit = self.cfg["cost_limit"]
-        self._state_dependence = self.cfg["state_dependence"]
-        self._mini_batches = self.cfg["mini_batches"]
-        self._large_scale = self.cfg["large_scale"]
-
-        # lagrangian
-        if self._use_lagrangian:
-            if not self._state_dependence:
-                self._lagrangian_pid[1] = 0
-                self._lagrangian_pid[2] = 0
-                self.lag_optim = LagrangianOptimizer(self._lagrangian_pid)
-            else:
-                self.lag_optim = [LagrangianOptimizer(self._lagrangian_pid) for _ in range(self._mini_batches)]
-        else:
-            self.lag_optim = []
-
+        self._polyak = self.cfg["polyak"]
+        self._learn_cost = self.cfg["learn_cost"]
+        if self._learn_cost:
+            self._cost_limit = 0.5
+    
         # optimizer
         if self.cost_value is not None:
             self.optimizer = torch.optim.Adam(
                 itertools.chain(
                     self.policy.parameters(), 
                     self.value.parameters(),
-                    self.cost_value.parameters()), 
+                    self.cost_value.parameters(), 
+                    self.cost_critic.parameters()),
                 lr=self._learning_rate
             )
+            self.checkpoint_modules["optimizer"] = self.optimizer
+
+        # freeze target value
+        self.target_cost_value.freeze_parameters(True)
+
         # cost value preprocessor
         if self._cost_value_preprocessor:
             self._cost_value_preprocessor = self._cost_value_preprocessor(**self.cfg["cost_value_preprocessor_kwargs"])
@@ -160,8 +157,6 @@ class PPOLagrangian(PPO):
         else:
             self._cost_value_preprocessor = self._empty_preprocessor
 
-        
-        
     def init(self, trainer_cfg: Optional[Dict[str, Any]] = None) -> None:
         """Initialize the agent
         """
@@ -173,15 +168,18 @@ class PPOLagrangian(PPO):
         # =================================================================
         # create tensors in memory
         if self.memory is not None:
+            self.memory.create_tensor(name="next_states", size=self.observation_space, dtype=torch.float32)
             self.memory.create_tensor(name="costs", size=1, dtype=torch.float32)
             self.memory.create_tensor(name="cost_values", size=1, dtype=torch.float32)
             self.memory.create_tensor(name="cost_returns", size=1, dtype=torch.float32)
             self.memory.create_tensor(name="cost_advantages", size=1, dtype=torch.float32)
             
             # tensors sampled during training
-            self._tensors_names = ["states", "actions", "log_prob", 
-                                   "values", "returns", "advantages", 
-                                   "cost_values", "cost_returns", "cost_advantages"]
+            self._tensors_names = ["states", "actions", "next_states", "log_prob", 
+                                   "values", "returns", "advantages", "costs",
+                                   "cost_values", "cost_returns", "cost_advantages",
+                                   "terminated", "truncated"]
+
 
     def act(self, states: torch.Tensor, timestep: int, timesteps: int) -> torch.Tensor:
         """Process the environment's states to make a decision (actions) using the main policy
@@ -200,7 +198,14 @@ class PPOLagrangian(PPO):
         # - sample random actions if required or
         #   sample and return agent's actions
         # ======================================
-        return super().act(states, timestep, timesteps)
+        # add safety filter
+        org_actions, logprobs, outputs = super().act(states, timestep, timesteps)
+        taken_actions = org_actions.clone()
+        with torch.no_grad():
+            q_values, _, _ = self.cost_critic.act({"states": self._state_preprocessor(states), "taken_actions": org_actions}, role="cost_critic")
+        taken_actions[q_values.squeeze(-1) > self._cost_limit, :] = torch.zeros_like(taken_actions[q_values.squeeze(-1) > self._cost_limit, :])
+
+        return org_actions, taken_actions, logprobs, outputs
 
     def record_transition(self,
                           states: torch.Tensor,
@@ -317,70 +322,6 @@ class PPOLagrangian(PPO):
         # call parent's method for checkpointing and TensorBoard writing
         super().post_interaction(timestep, timesteps)
 
-    def safety_loss(self, cost_value) -> Tuple[torch.tensor, dict]:
-        """Compute the safety loss based on Lagrangian and return the scaling factor.
-
-        :param list values: the cost values that want to be constrained. They will be
-            multiplied with the Lagrangian multipliers.
-        :return tuple[torch.tensor, dict]: the total safety loss and a dictionary of info
-            (including the rescaling factor, lagrangian, safety loss etc.)
-        """
-        # get a list of lagrangian multiplier
-        lag = self.lag_optim.get_lag()
-        # Alg. 1 of http://proceedings.mlr.press/v119/stooke20a/stooke20a.pdf
-        rescaling = 1. / (lag + 1) if self._rescaling else 1
-        stats = {"loss/rescaling": rescaling}
-        loss = torch.mean(cost_value * lag)
-        stats["loss/lagrangian"] = lag
-        stats["loss/actor_safety"] = loss.item()
-        return loss, stats
-    
-    def safety_loss_state_dep(self, cost_value) -> Tuple[torch.tensor, dict, torch.tensor]:
-        """Compute the safety loss based on Lagrangian and return the scaling factor.
-
-        :param list values: the cost values that want to be constrained. They will be
-            multiplied with the Lagrangian multipliers.
-        :return tuple[torch.tensor, dict]: the total safety loss and a dictionary of info
-            (including the rescaling factor, lagrangian, safety loss etc.)
-        """
-        # get a list of lagrangian multiplier
-        lag = self.cur_lag
-        # Alg. 1 of http://proceedings.mlr.press/v119/stooke20a/stooke20a.pdf
-        rescaling = 1. / (lag + 1)
-        stats = {"loss/rescaling": torch.mean(rescaling).item()}
-        loss = torch.mean(cost_value * lag)
-        stats["loss/lagrangian"] = torch.mean(lag).item()
-        stats["loss/actor_safety"] = loss.item()
-        return loss, stats, rescaling
-    
-    def update_lagrangian(self, cost_value) -> None:
-        """Update the Lagrangian multiplier before updating the policy.
-
-        :param Union[List, float] cost_values: the estimation of cost values that want to
-            be controlled under the target thresholds. It could be a list (multiple
-            constraints) or a scalar value.
-        """
-        # if self._state_dependence:
-        #     for i in range(self._mini_batches):
-        #         self.lag_optim[i].step(cost_value[i], self._cost_limit)
-        # else:
-        self.lag_optim.step(cost_value, self._cost_limit)
-
-    def update_lagrangian_per_state(self, cost_value) -> None:
-        """Update the Lagrangian multiplier before updating the policy.
-
-        :param Union[List, float] cost_values: the estimation of cost values that want to
-            be controlled under the target thresholds. It could be a list (multiple
-            constraints) or a scalar value.
-        """
-        # if self._state_dependence:
-        #     for i in range(self._mini_batches):
-        #         self.lag_optim[i].step(cost_value[i], self._cost_limit)
-        # else:
-        proj_cost_value = torch.clamp(cost_value - self._cost_limit, min=0)
-        with torch.no_grad():
-            self.cur_lag = self._lagrangian_pid[0] * proj_cost_value * self._large_scale
-
     def _update(self, timestep: int, timesteps: int) -> None:
         """Algorithm's main update step
 
@@ -496,20 +437,20 @@ class PPOLagrangian(PPO):
             for (
                 sampled_states,
                 sampled_actions,
+                sampled_next_states,
                 sampled_log_prob,
                 sampled_values,
                 sampled_returns,
                 sampled_advantages,
+                sampled_costs,
                 sampled_cost_values,
                 sampled_cost_returns,
                 sampled_cost_advantages,
+                sampled_terminated,
+                sampled_truncated,
             ) in sampled_batches:
                 
                 # TODO: first update lagrangian multiplier
-                if self._state_dependence:
-                    self.update_lagrangian_per_state(sampled_cost_values)
-                else:
-                    self.update_lagrangian(cost_values)
 
                 with torch.autocast(device_type=self._device_type, enabled=self._mixed_precision):
 
@@ -551,25 +492,36 @@ class PPOLagrangian(PPO):
                         predicted_values = sampled_values + torch.clip(
                             predicted_values - sampled_values, min=-self._value_clip, max=self._value_clip
                         )
-                    value_loss = self._value_loss_scale * F.mse_loss(sampled_returns, predicted_values)
-
-                    # TODO: safe policy update
-                    # compute safety loss
-                    if self._state_dependence:
-                        loss_actor_safety, stats_actor, rescaling = self.safety_loss_state_dep(sampled_cost_advantages)
-                    else:
-                        loss_actor_safety, stats_actor = self.safety_loss(ratio * sampled_cost_advantages)
-                    rescaling = stats_actor["loss/rescaling"]
-                    policy_loss = rescaling * (policy_loss + loss_actor_safety)
+                    value_loss = self._value_loss_scale * F.mse_loss(sampled_returns, predicted_values)                   
 
                     # compute cost value loss
                     predicted_cost_values, _, _ = self.cost_value.act({"states": sampled_states}, role="cost_value")
                     cost_value_loss = self._value_loss_scale * F.mse_loss(sampled_cost_returns, predicted_cost_values)
 
+                    # compute q cost
+                    with torch.no_grad():
+                        if self._learn_cost:
+                            target_q = sampled_costs
+                        else:
+                            next_cost_values, _, _ = self.target_cost_value.act(
+                                {"states": sampled_next_states}, role="target_cost_value"
+                            )
+                            target_q = (
+                                sampled_costs
+                                + self._discount_factor
+                                * (sampled_terminated | sampled_truncated).logical_not()
+                                * next_cost_values
+                            )
+                    q_cost, _, _ = self.cost_critic.act(
+                        {"states": sampled_states, "taken_actions": sampled_actions}, role="cost_critic"
+                    )
+                    # compute cost q value loss
+                    cost_q_loss = self._value_loss_scale * F.mse_loss(target_q, q_cost)
+
 
                 # optimization step
                 self.optimizer.zero_grad()
-                self.scaler.scale(policy_loss + entropy_loss + value_loss + cost_value_loss).backward()
+                self.scaler.scale(policy_loss + entropy_loss + value_loss + cost_value_loss + cost_q_loss).backward()
 
                 if config.torch.is_distributed:
                     self.policy.reduce_parameters()
@@ -587,6 +539,8 @@ class PPOLagrangian(PPO):
 
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
+
+                self.target_cost_value.update_parameters(self.cost_value, self._polyak)
 
                 # update cumulative losses
                 cumulative_policy_loss += policy_loss.item()
@@ -615,8 +569,7 @@ class PPOLagrangian(PPO):
             )
 
         self.track_data('Loss / Cost value loss', cost_value_loss.item())
-        self.track_data("Loss / lag", stats_actor["loss/lagrangian"])
-        self.track_data("Loss / policy safety loss", stats_actor["loss/actor_safety"])
+        self.track_data('Loss / Cost Q value loss', cost_q_loss.item())
 
         self.track_data("Policy / Standard deviation", self.policy.distribution(role="policy").stddev.mean().item())
 

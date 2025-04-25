@@ -792,6 +792,10 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
             env_ids = self.robot._ALL_INDICES
         super()._reset_idx(env_ids)
 
+        # reconstruct random maps
+        self.US_slicer.construct_T_maps()
+        self.US_slicer.construct_Vl_maps()
+
         joint_pos = self.robot.data.default_joint_pos.clone()
         joint_vel = self.robot.data.default_joint_vel.clone()
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel)

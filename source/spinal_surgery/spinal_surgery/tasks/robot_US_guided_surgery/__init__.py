@@ -26,6 +26,7 @@ gym.register(
         "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg.yaml",
         "skrl_sac_cfg_entry_point": f"{agents.__name__}:skrl_sac_cfg.yaml",
         "skrl_ppol_cfg_entry_point": f"{agents.__name__}:skrl_ppol_cfg.yaml",
+        "skrl_sppo_cfg_entry_point": f"{agents.__name__}:skrl_sppo_cfg.yaml",
         "skrl_td3_cfg_entry_point": f"{agents.__name__}:skrl_td3_cfg.yaml",
         "sb3_cfg_entry_point": f"{agents.__name__}:sb3_ppo_cfg.yaml",
         "fsrl_cfg_entry_point": f"{agents.__name__}:fsrl_ppol_cfg.yaml",

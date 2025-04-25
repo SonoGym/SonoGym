@@ -137,7 +137,8 @@ agent:
   grad_norm_clip: 1.0           # clipping coefficient for the norm of the gradients
   learn_entropy: True         # learn entropy
   entropy_learning_rate: 0.001 # entropy learning rate
-  initial_entropy_value: 0.002  # initial entropy value
+  initial_entropy_value: 0.2  # initial entropy value
+  target_entropy: -1.0        # target entropy
   mixed_precision: False      # enable automatic mixed precision for higher performance
   experiment:
     directory: US_guidance          # experiment's parent directory

@@ -241,12 +241,12 @@ class USSlicer(LabelImgSlicer):
             # cv2.waitKey(0)
             # cv2.destroyAllWindows()
             if self.sim_mode=='conv':
-                plt.figure(2, figsize=(first_n*3, 5))
+                plt.figure(3, figsize=(first_n*2, 3))
                 plt.clf()
                 plt.imshow((combined_img_np.T / 30*255).astype(np.uint8),cmap='gray')
                 plt.pause(0.0001)
             else:
-                plt.figure(2, figsize=(first_n*3, 5))
+                plt.figure(3, figsize=(first_n*2, 3))
                 plt.clf()
                 plt.imshow((combined_img_np.T / np.max(combined_img_np)*255).astype(np.uint8),cmap='gray')
                 plt.pause(0.0001)

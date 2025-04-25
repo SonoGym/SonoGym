@@ -103,3 +103,59 @@ class Critic(DeterministicMixin, Model):
                                      quat_features], dim=-1))
 
         return values, {}
+    
+
+class QNet(DeterministicMixin, Model):
+    def __init__(self, observation_space, action_space, device, clip_actions=False):
+        Model.__init__(self, observation_space, action_space, device)
+        DeterministicMixin.__init__(self, clip_actions)
+
+        self.features_extractor = nn.Sequential(nn.Conv2d(25, 32, kernel_size=8, stride=2),
+                                                nn.ReLU(),
+                                                nn.Conv2d(32, 64, kernel_size=4, stride=2),
+                                                nn.ReLU(),
+                                                nn.Conv2d(64, 64, kernel_size=3, stride=1),
+                                                nn.ReLU(),
+                                                nn.Conv2d(64, 128, kernel_size=3, stride=1),
+                                                nn.ReLU(),
+                                                nn.Flatten(),
+                                                )
+        self.net_features = nn.Linear(1536, 512)
+
+        self.net_actions = nn.Sequential(nn.Linear(6, 128),
+                                         nn.ReLU(),
+                                         nn.Linear(128, 64))
+
+        self.net_pos = nn.Sequential(nn.Linear(3, 128),
+                                     nn.ReLU(),
+                                     nn.Linear(128, 64))
+        self.net_quat = nn.Sequential(nn.Linear(4, 128),
+                                      nn.ReLU(),
+                                      nn.Linear(128, 64))
+
+        self.net = nn.Sequential(nn.Linear(512 + 64 + 64 + 64, 256),
+                                 nn.ReLU(),
+                                 nn.Linear(256, 128),
+                                 nn.ReLU(),
+                                 nn.Linear(128, 1))
+
+    def compute(self, inputs, role):
+        states = inputs["states"]
+        actions = inputs["taken_actions"]
+        space = self.tensor_to_space(states, self.observation_space)
+
+        image = space['image']
+        pos = space['pos']
+        quat = space['quat']
+
+        features = self.net_features(self.features_extractor(image))
+        pos_features = self.net_pos(pos)
+        quat_features = self.net_quat(quat)
+        action_features = self.net_actions(actions)
+
+        values = self.net(torch.cat([features,
+                                     pos_features,
+                                     quat_features,
+                                     action_features], dim=-1))
+
+        return values, {}
