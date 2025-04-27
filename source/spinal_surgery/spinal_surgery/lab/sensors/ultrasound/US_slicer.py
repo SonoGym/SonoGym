@@ -43,6 +43,7 @@ class USSlicer(LabelImgSlicer):
             self.us_sim = USSimulatorConv(us_cfg, device=device)
         elif self.sim_mode=='net':
             self.us_sim = USSimulatorNetwork(us_generative_cfg, device=device)
+            self.e_down = us_generative_cfg['elevation_downsample']
 
         self.us_cfg = us_cfg
         self.if_use_ct = if_use_ct
@@ -217,7 +218,9 @@ class USSlicer(LabelImgSlicer):
                 self.if_use_ct,
                 ct_img_tensor) # (n*e, H, W)
         else:
-            ct_img_tensor = self.ct_img_tensor.permute(0, 3, 1, 2).reshape((-1, self.img_size[0], self.img_size[1])) # (n*e, W, H)
+            ct_img_tensor = self.ct_img_tensor.permute(0, 3, 1, 2) # (n*e, W, H)
+            if ct_img_tensor.shape[1] > 1: # only for 3d us
+                ct_img_tensor = ct_img_tensor[:, ::self.e_down, :, :].reshape((-1, self.img_size[0], self.img_size[1]))
             self.us_img_tensor = self.us_sim.simulate_US_image(ct_img_tensor.unsqueeze(1)).permute((0, 1, 3, 2)) # (n*e, 1, W, H)
             # self.ct_img_tensor = ct_img_tensor.reshape((self.num_envs, -1, self.img_size[0], self.img_size[1])).permute(0, 2, 3, 1) # (n*e, W, H)
         self.us_img_tensor = self.us_img_tensor.reshape((self.num_envs, -1, self.img_size[1], self.img_size[0])).permute(0, 2, 3, 1) # (n, H, W, e)

@@ -72,17 +72,17 @@ def main():
     
     if args_cli.if_record:
         # create lerobot dataset
-        # lerobot_dataset = LeRobotDataset.create(
-        #     repo_id="yunkao/uspine",
-        #     fps=int(1 / env_cfg.sim.dt),
-        #     root="/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/" + args_cli.task,
-        #     robot_type="kuka-med",
-        #     features=features,
-        # )
-        lerobot_dataset = LeRobotDataset(
+        lerobot_dataset = LeRobotDataset.create(
             repo_id="yunkao/uspine",
-            root="/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/Isaac-robot-US-guided-surgery-v0-single",
+            fps=int(1 / env_cfg.sim.dt),
+            root="/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/" + args_cli.task,
+            robot_type="kuka-med",
+            features=features,
         )
+        # lerobot_dataset = LeRobotDataset(
+        #     repo_id="yunkao/uspine",
+        #     root="/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/Isaac-robot-US-guided-surgery-v0-single",
+        # )
 
     for ep_index in tqdm.tqdm(range(args_cli.num_traj // args_cli.num_envs)):
 
@@ -113,7 +113,7 @@ def main():
                 obs_quat = obs['policy']['quat'].squeeze(0).cpu().numpy()
                 action = actions.squeeze(0).cpu().numpy()
                 stacked_frame = {
-                    "observation.ultrasound": np.clip(obs_img * 5, 0.0, 1.0), #5 for 0.02 scale net surgery, *1 for 0.02 scale model based
+                    "observation.ultrasound": np.clip(obs_img, 0.0, 1.0),   # 5 for 0.02 scale net surgery, *1 for 0.02 scale model based
                     "observation.pos": obs_pos,
                     "observation.quat": obs_quat,
                     "action": action,
@@ -140,16 +140,28 @@ def main():
                             stacked_frame_list[i]['observation.quat'][ep, :]), axis=0
                         )
                         video = stacked_frame_list[i]['observation.ultrasound'][ep, ...]  # (25, 50, 37)
-                        frame = {
-                                "observation.images.slice_0": video[0:5:2, :, :].transpose(1, 2, 0),
-                                "observation.images.slice_1": video[5:10:2, :, :].transpose(1, 2, 0),
-                                "observation.images.slice_2": video[10:15:2, :, :].transpose(1, 2, 0),
-                                "observation.images.slice_3": video[15:20:2, :, :].transpose(1, 2, 0),
-                                "observation.images.slice_4": video[20:25:2, :, :].transpose(1, 2, 0),
+                        if video.shape[0] == 25:
+                            frame = {
+                                    "observation.images.slice_0": video[0:5:2, :, :].transpose(1, 2, 0),
+                                    "observation.images.slice_1": video[5:10:2, :, :].transpose(1, 2, 0),
+                                    "observation.images.slice_2": video[10:15:2, :, :].transpose(1, 2, 0),
+                                    "observation.images.slice_3": video[15:20:2, :, :].transpose(1, 2, 0),
+                                    "observation.images.slice_4": video[20:25:2, :, :].transpose(1, 2, 0),
+                                    "observation.state": state,
+                                    "action": stacked_frame_list[i]['action'][ep, :],
+                                    'task': SURGERY_TASK,
+                            }
+                        else:
+                            frame = {
+                                "observation.images.slice_0": np.repeat(video[0, :, :].transpose(1, 2, 0), 3, axis=1),
+                                "observation.images.slice_1": np.repeat(video[1, :, :].transpose(1, 2, 0), 3, axis=1),
+                                "observation.images.slice_2": np.repeat(video[2, :, :].transpose(1, 2, 0), 3, axis=1),
+                                "observation.images.slice_3": np.repeat(video[3, :, :].transpose(1, 2, 0), 3, axis=1),
+                                "observation.images.slice_4": np.repeat(video[4, :, :].transpose(1, 2, 0), 3, axis=1),
                                 "observation.state": state,
                                 "action": stacked_frame_list[i]['action'][ep, :],
                                 'task': SURGERY_TASK,
-                        }
+                            }
                     # add to frame
                     lerobot_dataset.add_frame(frame)
                 # save episode

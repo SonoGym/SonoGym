@@ -462,8 +462,8 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         else:
             raise ValueError("Invalid observation mode")
         
-        # if self.sim_cfg['vis_us']:
-        #     self.US_slicer.visualize(self.observation_mode)
+        if self.sim_cfg['vis_us']:
+            self.US_slicer.visualize(self.observation_mode)
         
         # get drill to US pose
         self.US_to_drill_pos, self.US_to_drill_quat = subtract_frame_transforms(
