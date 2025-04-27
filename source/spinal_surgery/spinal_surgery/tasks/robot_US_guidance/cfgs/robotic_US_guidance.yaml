@@ -23,7 +23,7 @@ motion_planning:
 observation: 
   3D: False
   mode: 'US' # 'seg', 'CT', 'US'
-  scale: 0.02 # 0.1, 0.0005, 1.0 # 1.0 for model-based, 0.1 for learning-based
+  scale: 0.02 # 0.02 for datacollection, 0.1 for learning-based
 action: 
   mode: 'continuous' # 'discrete', 'continuous'
   scale: [2, 2, 0.1]
@@ -39,5 +39,5 @@ sim:
   if_use_ct: True
   ct_range: [-300, 3000]
   us: 'conv' # 'conv', 'net'
-  vis_us: False
+  vis_us: True
   vis_seg_map: False

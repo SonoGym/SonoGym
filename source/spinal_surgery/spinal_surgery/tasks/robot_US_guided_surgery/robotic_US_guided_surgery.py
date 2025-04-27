@@ -144,7 +144,7 @@ class roboticUSGuidedSurgeryCfg(DirectRLEnvCfg):
     )
 
     # scene
-    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=100, env_spacing=4.0, replicate_physics=False)
+    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=100, env_spacing=2.0, replicate_physics=False)
 
 
 class roboticUSGuidedSurgeryEnv(DirectRLEnv):
@@ -303,6 +303,8 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
                 dtype=np.float32,
             )
 
+        wandb.init()
+
 
     def get_US_target_pose(self):
         # compute position change
@@ -460,8 +462,8 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         else:
             raise ValueError("Invalid observation mode")
         
-        if self.sim_cfg['vis_us']:
-            self.US_slicer.visualize(self.observation_mode)
+        # if self.sim_cfg['vis_us']:
+        #     self.US_slicer.visualize(self.observation_mode)
         
         # get drill to US pose
         self.US_to_drill_pos, self.US_to_drill_quat = subtract_frame_transforms(
@@ -495,8 +497,16 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.get_traj_to_tip_state()
         
         safety_critical = self.tip_pos_along_traj > - self.safe_height
-        # actions[safety_critical, 0:2] *= 0.1
-        actions[safety_critical, 3:] *= 0.1
+        safe_close = torch.logical_and(
+            safety_critical,
+            self.tip_to_traj_dist < self.vertebra_viewer.traj_radius + 0.002
+        )
+        safe_close = torch.logical_and(
+            safe_close,
+            self.tip_pos_along_traj < self.vertebra_viewer.traj_half_length
+        )
+        actions[safe_close, 0:2] *= 0.2
+        actions[safe_close, 3:] *= 0.2
         
         # action in ee space
         tip_to_next_tip_pos, tip_to_next_tip_quat = apply_delta_pose(
@@ -588,7 +598,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         safety_critical = self.tip_pos_along_traj > - self.safe_height
         safe_close = torch.logical_and(
             safety_critical,
-            self.tip_to_traj_dist < self.vertebra_viewer.traj_radius
+            self.tip_to_traj_dist < self.vertebra_viewer.traj_radius + 0.002
         )
         safe_close = torch.logical_and(
             safe_close,

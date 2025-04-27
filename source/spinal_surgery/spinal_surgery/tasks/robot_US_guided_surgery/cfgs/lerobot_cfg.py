@@ -1,8 +1,44 @@
 SURGERY_TASK = "perform spine surgery based on ultrasound volume."
 SURGERY_FEATURES = {
-    "observation.images": {
+    "observation.images.slice_0": {
         "dtype": "image",
-        "shape": (250, 185, 3),
+        "shape": (50, 37, 3),
+        "names": [
+            "height",
+            "width",
+            "channel",
+        ],
+    },
+    "observation.images.slice_1": {
+        "dtype": "image",
+        "shape": (50, 37, 3),
+        "names": [
+            "height",
+            "width",
+            "channel",
+        ],
+    },
+    "observation.images.slice_2": {
+        "dtype": "image",
+        "shape": (50, 37, 3),
+        "names": [
+            "height",
+            "width",
+            "channel",
+        ],
+    },
+    "observation.images.slice_3": {
+        "dtype": "image",
+        "shape": (50, 37, 3),
+        "names": [
+            "height",
+            "width",
+            "channel",
+        ],
+    },
+    "observation.images.slice_4": {
+        "dtype": "image",
+        "shape": (50, 37, 3),
         "names": [
             "height",
             "width",

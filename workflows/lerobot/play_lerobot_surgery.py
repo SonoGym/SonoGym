@@ -18,14 +18,27 @@ from lerobot.configs import parser
 from config import *
 
 
-def get_guidance_policy_input(obs):
-    observation = obs['policy']
+def get_surgery_policy_input(obs):
+    image = obs['policy']['image']
+    quat = obs['policy']['quat']
+    pos = obs['policy']['pos']
+
+    num_envs = image.shape[0]
+
+    video = obs['policy']['image']
+
+    video = torch.clamp(video, 0.0, 1.0)
+
+    state = torch.cat((pos, quat), dim=-1)
     obs = {
-        "observation.images": observation.repeat(1, 3, 1, 1),
-        "observation.state": torch.zeros((observation.shape[0], 2), device=obs['policy'].device),
+        "observation.images.slice_0": video[:, 0:5:2, :, :],
+        "observation.images.slice_1": video[:, 5:10:2, :, :],
+        "observation.images.slice_2": video[:, 10:15:2, :, :],
+        "observation.images.slice_3": video[:, 15:20:2, :, :],
+        "observation.images.slice_4": video[:, 20:25:2, :, :],
+        "observation.state": state,
     }
     return obs
-
 
 @parser.wrap()
 def main(cfg: EvalPipelineConfig):
@@ -50,17 +63,17 @@ def main(cfg: EvalPipelineConfig):
     import numpy as np
 
     env_cfg = parse_env_cfg(
-        "Isaac-robot-US-guidance-v0", 
+        "Isaac-robot-US-guided-surgery-v0", 
         device="cuda", 
         num_envs=64, 
         use_fabric=True
     )
 
-    env = gym.make("Isaac-robot-US-guidance-v0", cfg=env_cfg, render_mode=None)
+    env = gym.make("Isaac-robot-US-guided-surgery-v0", cfg=env_cfg, render_mode=None)
 
     # Load the dataset
     dataset_meta = LeRobotDatasetMetadata(repo_id="yunkao/us-guidance",
-                                          root="/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/Isaac-robot-US-guidance-v0-single")
+                                          root="/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/Isaac-robot-US-guided-surgery-v0-single")
     # Create the policy
     print(cfg.policy)
     policy: PreTrainedPolicy = make_policy(cfg=cfg.policy, ds_meta=dataset_meta)
@@ -81,7 +94,7 @@ def main(cfg: EvalPipelineConfig):
             # reset all the environments
             obs, _ = env.reset()
 
-            obs = get_guidance_policy_input(obs)
+            obs = get_surgery_policy_input(obs)
             # reset the policy
             policy.reset()
 
@@ -92,7 +105,7 @@ def main(cfg: EvalPipelineConfig):
         # step the environment
         obs, _, _, _, _ = env.step(action)
         # rename keys of the dictionary to match lerobot
-        obs = get_guidance_policy_input(obs)
+        obs = get_surgery_policy_input(obs)
 
         # update sim-time
         sim_time += sim_dt

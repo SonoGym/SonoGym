@@ -241,6 +241,8 @@ class roboticUSEnv(DirectRLEnv):
             dtype=np.float32,
         )
 
+        wandb.init()
+
     
     def get_US_target_pose(self):
         # compute position change
