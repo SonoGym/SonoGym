@@ -123,13 +123,13 @@ class VertebraViewer:
             self.tip_line_list[i].points = np.stack([tip_points_a_np[i], 
                                                      tip_points_b_np[i]], axis=0)
             if i%self.n_human_types == index:
-                self.p.add_mesh(self.tip_line_list[i], color='blue')
+                self.p.add_mesh(self.tip_line_list[i], color='black')
         # add tip representation
 
-        self.p.add_mesh(self.vertebra_points_np_list[index], color='red', point_size=0.5)
+        self.p.add_mesh(self.vertebra_points_np_list[index], color='cyan', point_size=0.5)
         self.p.add_mesh(self.traj_points_np_list[index], color='green', point_size=0.5)
-        self.p.add_mesh(pv.Sphere(center=self.human_to_traj_pos[index].cpu().numpy() / self.res, 
-                                  radius=self.traj_radius[index].item()/self.res), color='green', opacity=0.5)
+        # self.p.add_mesh(pv.Sphere(center=self.human_to_traj_pos[index].cpu().numpy() / self.res, 
+        #                           radius=self.traj_radius[index].item()/self.res), color='green', opacity=0.5)
 
         self.p.show(interactive_update=True)
         self.p.show_axes()

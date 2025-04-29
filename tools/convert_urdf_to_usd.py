@@ -116,6 +116,7 @@ def main():
             ),
             target_type=args_cli.joint_target_type,
         ),
+        collider_type="convex_decomposition"  # TODO: only for bed
     )
 
     # Print info

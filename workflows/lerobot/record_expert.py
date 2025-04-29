@@ -153,11 +153,11 @@ def main():
                             }
                         else:
                             frame = {
-                                "observation.images.slice_0": np.repeat(video[0, :, :].transpose(1, 2, 0), 3, axis=1),
-                                "observation.images.slice_1": np.repeat(video[1, :, :].transpose(1, 2, 0), 3, axis=1),
-                                "observation.images.slice_2": np.repeat(video[2, :, :].transpose(1, 2, 0), 3, axis=1),
-                                "observation.images.slice_3": np.repeat(video[3, :, :].transpose(1, 2, 0), 3, axis=1),
-                                "observation.images.slice_4": np.repeat(video[4, :, :].transpose(1, 2, 0), 3, axis=1),
+                                "observation.images.slice_0": np.repeat(video[0:1, :, :].transpose(1, 2, 0), 3, axis=-1),
+                                "observation.images.slice_1": np.repeat(video[1:2, :, :].transpose(1, 2, 0), 3, axis=-1),
+                                "observation.images.slice_2": np.repeat(video[2:3, :, :].transpose(1, 2, 0), 3, axis=-1),
+                                "observation.images.slice_3": np.repeat(video[3:4, :, :].transpose(1, 2, 0), 3, axis=-1),
+                                "observation.images.slice_4": np.repeat(video[4:5, :, :].transpose(1, 2, 0), 3, axis=-1),
                                 "observation.state": state,
                                 "action": stacked_frame_list[i]['action'][ep, :],
                                 'task': SURGERY_TASK,

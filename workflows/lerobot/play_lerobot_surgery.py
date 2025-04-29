@@ -18,27 +18,7 @@ from lerobot.configs import parser
 from config import *
 
 
-def get_surgery_policy_input(obs):
-    image = obs['policy']['image']
-    quat = obs['policy']['quat']
-    pos = obs['policy']['pos']
 
-    num_envs = image.shape[0]
-
-    video = obs['policy']['image']
-
-    video = torch.clamp(video, 0.0, 1.0)
-
-    state = torch.cat((pos, quat), dim=-1)
-    obs = {
-        "observation.images.slice_0": video[:, 0:5:2, :, :],
-        "observation.images.slice_1": video[:, 5:10:2, :, :],
-        "observation.images.slice_2": video[:, 10:15:2, :, :],
-        "observation.images.slice_3": video[:, 15:20:2, :, :],
-        "observation.images.slice_4": video[:, 20:25:2, :, :],
-        "observation.state": state,
-    }
-    return obs
 
 @parser.wrap()
 def main(cfg: EvalPipelineConfig):
@@ -61,11 +41,46 @@ def main(cfg: EvalPipelineConfig):
     from isaaclab_tasks.utils import get_checkpoint_path, load_cfg_from_registry, parse_env_cfg
     import wandb
     import numpy as np
+    from spinal_surgery.tasks.robot_US_guidance.robotic_US_guidance import scene_cfg
+
+    def get_surgery_policy_input(obs):
+        image = obs['policy']['image']
+        quat = obs['policy']['quat']
+        pos = obs['policy']['pos']
+
+        num_envs = image.shape[0]
+
+        video = obs['policy']['image']
+
+        video = torch.clamp(video, 0.0, 1.0)
+
+        state = torch.cat((pos, quat), dim=-1)
+
+        if scene_cfg['sim']['us'] == 'net':
+            video = video
+            obs = {
+                "observation.images.slice_0": video[:, 0:1, :, :].repeat(1, 3, 1, 1),
+                "observation.images.slice_1": video[:, 1:2, :, :].repeat(1, 3, 1, 1),
+                "observation.images.slice_2": video[:, 2:3, :, :].repeat(1, 3, 1, 1),
+                "observation.images.slice_3": video[:, 3:4, :, :].repeat(1, 3, 1, 1),
+                "observation.images.slice_4": video[:, 4:5, :, :].repeat(1, 3, 1, 1),
+                "observation.state": state,
+            }
+        else:
+            obs = {
+                "observation.images.slice_0": video[:, 0:5:2, :, :],
+                "observation.images.slice_1": video[:, 5:10:2, :, :],
+                "observation.images.slice_2": video[:, 10:15:2, :, :],
+                "observation.images.slice_3": video[:, 15:20:2, :, :],
+                "observation.images.slice_4": video[:, 20:25:2, :, :],
+                "observation.state": state,
+            }
+        return obs
 
     env_cfg = parse_env_cfg(
         "Isaac-robot-US-guided-surgery-v0", 
         device="cuda", 
-        num_envs=64, 
+        num_envs=32, 
         use_fabric=True
     )
 

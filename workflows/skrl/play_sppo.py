@@ -92,7 +92,7 @@ import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils import get_checkpoint_path, load_cfg_from_registry, parse_env_cfg
 import wandb
 from spinal_surgery.lab.agents.skrl_safety_filter_agent import SafetyFilterPPO, SPPO_DEFAULT_CONFIG
-from spinal_surgery.lab.agents.skrl_actor_critic import StochasticActor, Critic, QNet
+from spinal_surgery.lab.agents.skrl_actor_critic import SharedModel, QNet
 from skrl.memories.torch import RandomMemory
 from skrl.resources.schedulers.torch.kl_adaptive import KLAdaptiveLR
 from skrl.resources.preprocessors.torch.running_standard_scaler import RunningStandardScaler
@@ -179,11 +179,9 @@ def main():
 
     models = {}
     device = env_cfg.sim.device
-    models["policy"] = StochasticActor(env.observation_space, env.action_space, device, clip_actions=False)
-    models["value"] = Critic(env.observation_space, env.action_space, device)
-    models["cost_value"] = Critic(env.observation_space, env.action_space, device)
+    models["policy"] = SharedModel(env.observation_space, env.action_space, device, clip_actions=False)
+    models["value"] = models["policy"]
     models["cost_critic"] = QNet(env.observation_space, env.action_space, device)
-    models["target_cost_value"] = Critic(env.observation_space, env.action_space, device)
     if agent_cfg['learning_rate_scheduler'] == "KLAdaptiveLR":
         agent_cfg["learning_rate_scheduler"] = KLAdaptiveLR
     if agent_cfg['value_preprocessor'] == "RunningStandardScaler":
@@ -213,12 +211,19 @@ def main():
         with torch.inference_mode():
             # agent stepping
             outputs = sppo_agent.act(obs, timestep=0, timesteps=0)
+
             # - multi-agent (deterministic) actions
             if hasattr(env, "possible_agents"):
                 actions = {a: outputs[-1][a].get("mean_actions", outputs[0][a]) for a in env.possible_agents}
             # - single-agent (deterministic) actions
             else:
                 actions = outputs[-1].get("mean_actions", outputs[0])
+
+            # apply safety filter
+            inputs = {'states': obs, 'taken_actions': actions}
+            pred_cost = sppo_agent.cost_critic.act(inputs, role="cost_critic")[0].reshape((-1,))
+
+            actions[pred_cost > 0.5, :] = 0.0
             # env stepping
             obs, _, _, _, _ = env.step(actions)
         if args_cli.video:

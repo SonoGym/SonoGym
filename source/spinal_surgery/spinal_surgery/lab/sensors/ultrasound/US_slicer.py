@@ -221,12 +221,14 @@ class USSlicer(LabelImgSlicer):
             ct_img_tensor = self.ct_img_tensor.permute(0, 3, 1, 2) # (n*e, W, H)
             if ct_img_tensor.shape[1] > 1: # only for 3d us
                 ct_img_tensor = ct_img_tensor[:, ::self.e_down, :, :].reshape((-1, self.img_size[0], self.img_size[1]))
+            else:
+                ct_img_tensor = ct_img_tensor.reshape((-1, self.img_size[0], self.img_size[1]))
             self.us_img_tensor = self.us_sim.simulate_US_image(ct_img_tensor.unsqueeze(1)).permute((0, 1, 3, 2)) # (n*e, 1, W, H)
             # self.ct_img_tensor = ct_img_tensor.reshape((self.num_envs, -1, self.img_size[0], self.img_size[1])).permute(0, 2, 3, 1) # (n*e, W, H)
         self.us_img_tensor = self.us_img_tensor.reshape((self.num_envs, -1, self.img_size[1], self.img_size[0])).permute(0, 2, 3, 1) # (n, H, W, e)
 
 
-    def visualize(self, key, first_n=20):
+    def visualize(self, key, first_n=10):
         super().visualize(key, first_n)
         # if key=='CT' or key=='seg':
         #     super().visualize(key, first_n)

@@ -18,14 +18,6 @@ from lerobot.configs import parser
 from config import *
 
 
-def get_guidance_policy_input(obs):
-    observation = obs['policy']
-    obs = {
-        "observation.images": observation.repeat(1, 3, 1, 1),
-        "observation.state": torch.zeros((observation.shape[0], 2), device=obs['policy'].device),
-    }
-    return obs
-
 
 @parser.wrap()
 def main(cfg: EvalPipelineConfig):
@@ -49,10 +41,24 @@ def main(cfg: EvalPipelineConfig):
     import wandb
     import numpy as np
 
+    from spinal_surgery.tasks.robot_US_guidance.robotic_US_guidance import scene_cfg
+
+    us_mode = scene_cfg['sim']['us']
+
+    def get_guidance_policy_input(obs):
+        observation = obs['policy']
+        if us_mode == 'net':
+            observation *= 6
+        obs = {
+            "observation.images": observation.repeat(1, 3, 1, 1),
+            "observation.state": torch.zeros((observation.shape[0], 2), device=obs['policy'].device),
+        }
+        return obs
+
     env_cfg = parse_env_cfg(
         "Isaac-robot-US-guidance-v0", 
         device="cuda", 
-        num_envs=64, 
+        num_envs=10, 
         use_fabric=True
     )
 

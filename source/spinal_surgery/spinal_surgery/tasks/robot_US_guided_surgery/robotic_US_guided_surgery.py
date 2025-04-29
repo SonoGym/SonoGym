@@ -253,6 +253,8 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
                                                  ).reshape((1, -1)).repeat(self.scene.num_envs, 1).to(self.sim.device)
 
         self.cfg.observation_space[0] = self.US_slicer.img_thickness
+        if scene_cfg['sim']['us']=='net':
+            self.cfg.observation_space[0] = self.cfg.observation_space[0] // us_generative_cfg['elevation_downsample']
 
         self.single_observation_space['policy'] = Dict({
             'image': gym.spaces.Box(
@@ -304,6 +306,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
             )
 
         wandb.init()
+        self.num_step = 0
 
 
     def get_US_target_pose(self):
@@ -360,10 +363,14 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.robot_drill = Articulation(self.cfg.robot_drill_cfg)
 
         # medical bad
+        if scene_cfg['sim']['vis_us']:
+            usd_folder = "usd_colored"
+        else:
+            usd_folder = "usd_no_contact"
         medical_bed_cfg = RigidObjectCfg(
             prim_path="/World/envs/env_.*/Bed", 
             spawn=sim_utils.UsdFileCfg(
-                usd_path=f"{ASSETS_DATA_DIR}/MedicalBed/usd_no_contact/hospital_bed.usd",
+                usd_path=f"{ASSETS_DATA_DIR}/MedicalBed/" + usd_folder + "/hospital_bed.usd",
                 scale = (scale_bed, scale_bed, scale_bed),
                 rigid_props=sim_utils.RigidBodyPropertiesCfg(
                     disable_gravity=False,
@@ -386,25 +393,25 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         human_cfg = RigidObjectCfg(
             prim_path="/World/envs/env_.*/Human", 
             spawn=sim_utils.MultiUsdFileCfg(
-            usd_path=usd_file_list,
-            random_choice=False,
-            scale = (label_res, label_res, label_res),
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                disable_gravity=False,
-                retain_accelerations=False,
-                linear_damping=0.0,
-                angular_damping=0.0,
-                max_linear_velocity=1000.0,
-                max_angular_velocity=1000.0,
-                max_depenetration_velocity=1.0,
-                solver_position_iteration_count=8,
-                solver_velocity_iteration_count=0,
-            ),
-            articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-            articulation_enabled=False,
-            solver_position_iteration_count=12,
-            solver_velocity_iteration_count=0,
-            ),
+                usd_path=usd_file_list,
+                random_choice=False,
+                scale=(label_res, label_res, label_res),
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                    disable_gravity=False,
+                    retain_accelerations=False,
+                    linear_damping=0.0,
+                    angular_damping=0.0,
+                    max_linear_velocity=1000.0,
+                    max_angular_velocity=1000.0,
+                    max_depenetration_velocity=1.0,
+                    solver_position_iteration_count=8,
+                    solver_velocity_iteration_count=0,
+                ),
+                articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+                    articulation_enabled=False,
+                    solver_position_iteration_count=12,
+                    solver_velocity_iteration_count=0,
+                ),
             ),
             init_state = INIT_STATE_HUMAN,
         )
@@ -447,6 +454,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.world_to_human_pos, self.world_to_human_rot = self.human_world_poses[:, 0:3], self.human_world_poses[:, 3:7]
         # get ee pose w
         self.US_ee_pose_w = self.robot.data.body_state_w[:, self.robot_entity_cfg.body_ids[-1], 0:7]
+        self.num_step += 1
 
         
         if self.observation_mode == "US":
@@ -462,7 +470,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         else:
             raise ValueError("Invalid observation mode")
         
-        if self.sim_cfg['vis_us']:
+        if self.sim_cfg['vis_us'] and self.num_step % self.sim_cfg['vis_int'] == 0:
             self.US_slicer.visualize(self.observation_mode)
         
         # get drill to US pose
@@ -655,6 +663,9 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         # reward[free_region] += self.w_angle * (self.last_traj_to_tip_sin[free_region] - self.traj_to_tip_sin[free_region])
         reward += self.w_pos * (self.last_tip_to_traj_dist - self.tip_to_traj_dist)
         reward += self.w_angle * (torch.abs(self.last_traj_to_tip_sin) - torch.abs(self.traj_to_tip_sin))
+        # TODO: add more for safe region
+        reward[safe_close] += self.w_insertion * (self.last_tip_to_traj_dist[safe_close] - self.tip_to_traj_dist[safe_close])
+        # reward[safe_close] += self.w_angle * (self.last_traj_to_tip_sin[safe_close] - self.traj_to_tip_sin[safe_close])
         # print('traj_to_tip_sin', self.traj_to_tip_sin)
         # print('last_traj_to_tip_sin', self.last_traj_to_tip_sin)
         # reward -= penalty * self.w_penalty

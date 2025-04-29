@@ -23,13 +23,13 @@ import wandb
 
 SPPO_DEFAULT_CONFIG = {
     "rollouts": 16,                 # number of rollouts before updating
-    "learning_epochs": 8,           # number of learning epochs during each update
-    "mini_batches": 2,              # number of mini batches during each learning epoch
+    "learning_epochs": 32,           # number of learning epochs during each update
+    "mini_batches": 5,              # number of mini batches during each learning epoch
 
     "discount_factor": 0.99,        # discount factor (gamma)
     "lambda": 0.95,                 # TD(lambda) coefficient (lam) for computing returns and advantages
 
-    "learning_rate": 1e-3,                  # learning rate
+    "learning_rate": 1e-4,                  # learning rate
     "learning_rate_scheduler": None,        # learning rate scheduler class (see torch.optim.lr_scheduler)
     "learning_rate_scheduler_kwargs": {},   # learning rate scheduler's kwargs (e.g. {"step_size": 1e-3})
 
@@ -43,10 +43,10 @@ SPPO_DEFAULT_CONFIG = {
     "random_timesteps": 0,          # random exploration steps
     "learning_starts": 0,           # learning starts after this many steps
 
-    "grad_norm_clip": 0.5,              # clipping coefficient for the norm of the gradients
+    "grad_norm_clip": 1.0,              # clipping coefficient for the norm of the gradients
     "ratio_clip": 0.2,                  # clipping coefficient for computing the clipped surrogate objective
-    "value_clip": 0.2,                  # clipping coefficient for computing the value loss (if clip_predicted_values is True)
-    "clip_predicted_values": False,     # clip predicted values during value loss computation
+    "value_clip": 0.1,                  # clipping coefficient for computing the value loss (if clip_predicted_values is True)
+    "clip_predicted_values": True,     # clip predicted values during value loss computation
 
     "entropy_loss_scale": 0.0,      # entropy loss scaling factor
     "value_loss_scale": 1.0,        # value loss scaling factor
@@ -118,15 +118,11 @@ class SafetyFilterPPO(PPO):
         # - set up preprocessors
         # =======================================================================
         # get cost value function
-        self.cost_value = self.models.get("cost_value", None)
         self.cost_critic = self.models.get("cost_critic", None)
-        self.target_cost_value = self.models.get("target_cost_value", None)
 
         # checkpoint models
-        self.checkpoint_modules["cost_value"] = self.cost_value
         self.checkpoint_modules["cost_critic"] = self.cost_critic
-        self.checkpoint_modules["target_cost_value"] = self.target_cost_value
-
+    
         # additional attributes
         self._cost_value_preprocessor = self.cfg["cost_value_preprocessor"]
         self._cost_limit = self.cfg["cost_limit"]
@@ -136,50 +132,36 @@ class SafetyFilterPPO(PPO):
             self._cost_limit = 0.5
     
         # optimizer
-        if self.cost_value is not None:
+        if self.cost_critic is not None:
             self.optimizer = torch.optim.Adam(
                 itertools.chain(
                     self.policy.parameters(), 
                     self.value.parameters(),
-                    self.cost_value.parameters(), 
                     self.cost_critic.parameters()),
                 lr=self._learning_rate
             )
+            if self._learning_rate_scheduler is not None:
+                self.scheduler = self._learning_rate_scheduler(
+                    self.optimizer, **self.cfg["learning_rate_scheduler_kwargs"]
+                )
             self.checkpoint_modules["optimizer"] = self.optimizer
 
-        # freeze target value
-        self.target_cost_value.freeze_parameters(True)
-
-        # cost value preprocessor
-        if self._cost_value_preprocessor:
-            self._cost_value_preprocessor = self._cost_value_preprocessor(**self.cfg["cost_value_preprocessor_kwargs"])
-            self.checkpoint_modules["cost_value_preprocessor"] = self._cost_value_preprocessor
-        else:
-            self._cost_value_preprocessor = self._empty_preprocessor
 
     def init(self, trainer_cfg: Optional[Dict[str, Any]] = None) -> None:
         """Initialize the agent
         """
         super().init(trainer_cfg=trainer_cfg)
-        self.set_mode("eval")
         # =================================================================
         # - create tensors in memory if required
         # - # create temporary variables needed for storage and computation
         # =================================================================
         # create tensors in memory
         if self.memory is not None:
-            self.memory.create_tensor(name="next_states", size=self.observation_space, dtype=torch.float32)
             self.memory.create_tensor(name="costs", size=1, dtype=torch.float32)
-            self.memory.create_tensor(name="cost_values", size=1, dtype=torch.float32)
-            self.memory.create_tensor(name="cost_returns", size=1, dtype=torch.float32)
-            self.memory.create_tensor(name="cost_advantages", size=1, dtype=torch.float32)
             
             # tensors sampled during training
-            self._tensors_names = ["states", "actions", "next_states", "log_prob", 
-                                   "values", "returns", "advantages", "costs",
-                                   "cost_values", "cost_returns", "cost_advantages",
-                                   "terminated", "truncated"]
-
+            self._tensors_names = ["states", "actions", "log_prob", 
+                                   "values", "returns", "advantages", "costs"]
 
     def act(self, states: torch.Tensor, timestep: int, timesteps: int) -> torch.Tensor:
         """Process the environment's states to make a decision (actions) using the main policy
@@ -200,12 +182,12 @@ class SafetyFilterPPO(PPO):
         # ======================================
         # add safety filter
         org_actions, logprobs, outputs = super().act(states, timestep, timesteps)
-        taken_actions = org_actions.clone()
-        with torch.no_grad():
-            q_values, _, _ = self.cost_critic.act({"states": self._state_preprocessor(states), "taken_actions": org_actions}, role="cost_critic")
-        taken_actions[q_values.squeeze(-1) > self._cost_limit, :] = torch.zeros_like(taken_actions[q_values.squeeze(-1) > self._cost_limit, :])
+        # taken_actions = org_actions.clone()
+        # with torch.no_grad():
+        #     q_values, _, _ = self.cost_critic.act({"states": self._state_preprocessor(states), "taken_actions": org_actions}, role="cost_critic")
+        # taken_actions[q_values.squeeze(-1) > self._cost_limit, :] = torch.zeros_like(taken_actions[q_values.squeeze(-1) > self._cost_limit, :])
 
-        return org_actions, taken_actions, logprobs, outputs
+        return org_actions, logprobs, outputs
 
     def record_transition(self,
                           states: torch.Tensor,
@@ -238,7 +220,8 @@ class SafetyFilterPPO(PPO):
         :param timesteps: Number of timesteps
         :type timesteps: int
         """
-        super(PPO, self).record_transition(states, actions, rewards, next_states, terminated, truncated, infos, timestep, timesteps)
+        super(PPO, self).record_transition(states, actions, rewards, next_states, 
+                                           terminated, truncated, infos, timestep, timesteps)
 
 
         # ========================================
@@ -258,15 +241,10 @@ class SafetyFilterPPO(PPO):
             with torch.autocast(device_type=self._device_type, enabled=self._mixed_precision):
                 values, _, _ = self.value.act({"states": self._state_preprocessor(states)}, role="value")
                 values = self._value_preprocessor(values, inverse=True)
-                # TODO: compute cost values
-                cost_values, _, _ = self.cost_value.act({"states": self._state_preprocessor(states)}, role="cost_value")
-                cost_values = self._cost_value_preprocessor(cost_values, inverse=True)
-
+                
             # time-limit (truncation) bootstrapping
             if self._time_limit_bootstrap:
                 rewards += self._discount_factor * values * truncated
-                # TODO: cost
-                costs += self._discount_factor * cost_values * truncated
 
             # storage transition in memory
             self.memory.add_samples(
@@ -278,7 +256,6 @@ class SafetyFilterPPO(PPO):
                 truncated=truncated,
                 log_prob=self._current_log_prob,
                 values=values,
-                cost_values=cost_values,
                 costs=costs,
             )
             for memory in self.secondary_memories:
@@ -291,7 +268,6 @@ class SafetyFilterPPO(PPO):
                     truncated=truncated,
                     log_prob=self._current_log_prob,
                     values=values,
-                    cost_values=cost_values,
                     costs=costs,
                 )
 
@@ -383,17 +359,11 @@ class SafetyFilterPPO(PPO):
         # compute returns and advantages
         with torch.no_grad(), torch.autocast(device_type=self._device_type, enabled=self._mixed_precision):
             self.value.train(False)
-            self.cost_value.train(False)
             last_values, _, _ = self.value.act(
                 {"states": self._state_preprocessor(self._current_next_states.float())}, role="value"
             )
-            last_cost_values, _, _ = self.cost_value.act(
-                {"states": self._state_preprocessor(self._current_next_states.float())}, role="cost_value"
-            )
             self.value.train(True)
-            self.cost_value.train(True)
             last_values = self._value_preprocessor(last_values, inverse=True)
-            last_cost_values = self._cost_value_preprocessor(last_cost_values, inverse=True)
 
         values = self.memory.get_tensor_by_name("values")
         returns, advantages = compute_gae(
@@ -404,23 +374,10 @@ class SafetyFilterPPO(PPO):
             discount_factor=self._discount_factor,
             lambda_coefficient=self._lambda,
         )
-        # compute cost returns and advantages
-        cost_values = self.memory.get_tensor_by_name("cost_values")
-        cost_returns, cost_advantages = compute_gae(
-            rewards=self.memory.get_tensor_by_name("costs"),
-            dones=self.memory.get_tensor_by_name("terminated") | self.memory.get_tensor_by_name("truncated"),
-            values=cost_values,
-            next_values=last_cost_values,
-            discount_factor=self._discount_factor,
-            lambda_coefficient=self._lambda,
-        )
 
         self.memory.set_tensor_by_name("values", self._value_preprocessor(values, train=True))
         self.memory.set_tensor_by_name("returns", self._value_preprocessor(returns, train=True))
         self.memory.set_tensor_by_name("advantages", advantages)
-        self.memory.set_tensor_by_name("cost_values", self._cost_value_preprocessor(cost_values, train=True))
-        self.memory.set_tensor_by_name("cost_returns", self._cost_value_preprocessor(cost_returns, train=True))
-        self.memory.set_tensor_by_name("cost_advantages", cost_advantages)
 
         # sample mini-batches from memory
         sampled_batches = self.memory.sample_all(names=self._tensors_names, mini_batches=self._mini_batches)
@@ -437,17 +394,11 @@ class SafetyFilterPPO(PPO):
             for (
                 sampled_states,
                 sampled_actions,
-                sampled_next_states,
                 sampled_log_prob,
                 sampled_values,
                 sampled_returns,
                 sampled_advantages,
                 sampled_costs,
-                sampled_cost_values,
-                sampled_cost_returns,
-                sampled_cost_advantages,
-                sampled_terminated,
-                sampled_truncated,
             ) in sampled_batches:
                 
                 # TODO: first update lagrangian multiplier
@@ -494,34 +445,19 @@ class SafetyFilterPPO(PPO):
                         )
                     value_loss = self._value_loss_scale * F.mse_loss(sampled_returns, predicted_values)                   
 
-                    # compute cost value loss
-                    predicted_cost_values, _, _ = self.cost_value.act({"states": sampled_states}, role="cost_value")
-                    cost_value_loss = self._value_loss_scale * F.mse_loss(sampled_cost_returns, predicted_cost_values)
-
                     # compute q cost
                     with torch.no_grad():
-                        if self._learn_cost:
-                            target_q = sampled_costs
-                        else:
-                            next_cost_values, _, _ = self.target_cost_value.act(
-                                {"states": sampled_next_states}, role="target_cost_value"
-                            )
-                            target_q = (
-                                sampled_costs
-                                + self._discount_factor
-                                * (sampled_terminated | sampled_truncated).logical_not()
-                                * next_cost_values
-                            )
+                        target_q = sampled_costs
+                       
                     q_cost, _, _ = self.cost_critic.act(
                         {"states": sampled_states, "taken_actions": sampled_actions}, role="cost_critic"
                     )
                     # compute cost q value loss
                     cost_q_loss = self._value_loss_scale * F.mse_loss(target_q, q_cost)
 
-
                 # optimization step
                 self.optimizer.zero_grad()
-                self.scaler.scale(policy_loss + entropy_loss + value_loss + cost_value_loss + cost_q_loss).backward()
+                self.scaler.scale(policy_loss + entropy_loss + value_loss + cost_q_loss).backward()
 
                 if config.torch.is_distributed:
                     self.policy.reduce_parameters()
@@ -539,8 +475,6 @@ class SafetyFilterPPO(PPO):
 
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
-
-                self.target_cost_value.update_parameters(self.cost_value, self._polyak)
 
                 # update cumulative losses
                 cumulative_policy_loss += policy_loss.item()
@@ -568,7 +502,6 @@ class SafetyFilterPPO(PPO):
                 "Loss / Entropy loss", cumulative_entropy_loss / (self._learning_epochs * self._mini_batches)
             )
 
-        self.track_data('Loss / Cost value loss', cost_value_loss.item())
         self.track_data('Loss / Cost Q value loss', cost_q_loss.item())
 
         self.track_data("Policy / Standard deviation", self.policy.distribution(role="policy").stddev.mean().item())

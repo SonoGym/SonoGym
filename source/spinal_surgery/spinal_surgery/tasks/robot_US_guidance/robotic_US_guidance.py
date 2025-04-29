@@ -242,6 +242,7 @@ class roboticUSEnv(DirectRLEnv):
         )
 
         wandb.init()
+        self.num_step = 0
 
     
     def get_US_target_pose(self):
@@ -273,11 +274,14 @@ class roboticUSEnv(DirectRLEnv):
         # kuka US
         self.robot = Articulation(self.cfg.robot_cfg)
 
-        # medical bad
+        if scene_cfg['sim']['vis_us']:
+            usd_folder = "usd_colored"
+        else:
+            usd_folder = "usd_no_contact"
         medical_bed_cfg = RigidObjectCfg(
             prim_path="/World/envs/env_.*/Bed", 
             spawn=sim_utils.UsdFileCfg(
-                usd_path=f"{ASSETS_DATA_DIR}/MedicalBed/usd_no_contact/hospital_bed.usd",
+                usd_path=f"{ASSETS_DATA_DIR}/MedicalBed/" + usd_folder + "/hospital_bed.usd",
                 scale = (scale_bed, scale_bed, scale_bed),
                 rigid_props=sim_utils.RigidBodyPropertiesCfg(
                     disable_gravity=False,
@@ -337,7 +341,7 @@ class roboticUSEnv(DirectRLEnv):
         self.world_to_human_pos, self.world_to_human_rot = self.human_world_poses[:, 0:3], self.human_world_poses[:, 3:7]
         # get ee pose w
         self.US_ee_pose_w = self.robot.data.body_state_w[:, self.robot_entity_cfg.body_ids[-1], 0:7]
-
+        self.num_step += 1
         
         if self.observation_mode == "US":
             self.US_slicer.slice_US(self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7])
@@ -354,7 +358,7 @@ class roboticUSEnv(DirectRLEnv):
         else:
             raise ValueError("Invalid observation mode")
 
-        if self.sim_cfg['vis_us']:
+        if self.sim_cfg['vis_us'] and self.num_step % self.sim_cfg['vis_int'] == 0:
             self.US_slicer.visualize(self.observation_mode)
 
         return observations

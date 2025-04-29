@@ -177,7 +177,7 @@ class LabelImgSlicer(SurfaceMotionPlanner):
         visualize label image by combine'''
         first_n = min(first_n, self.num_envs)
 
-        if key=='seg' or key=='US':
+        if key=='seg':  #or key=='US':
 
             combined_img = self.label_img_tensor[:first_n, :, :, 0].reshape((first_n * self.img_size[0], self.img_size[1])) # (w * first_n, h)
 
@@ -191,7 +191,7 @@ class LabelImgSlicer(SurfaceMotionPlanner):
             plt.imshow((combined_img_np.T / np.max(combined_img_np)*255).astype(np.uint8),cmap='gray')
             plt.pause(0.0001)
 
-        if key=='CT' or key=='US':
+        if key=='CT':  # or key=='US':
 
             combined_ct = self.ct_img_tensor[:first_n, :, :, 0].reshape((first_n * self.img_size[0], self.img_size[1])) # (w * first_n, h)
 

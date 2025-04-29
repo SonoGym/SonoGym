@@ -94,12 +94,13 @@ import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils.hydra import hydra_task_config
 from spinal_surgery.lab.agents.skrl_safety_filter_agent import SafetyFilterPPO, SPPO_DEFAULT_CONFIG
 from spinal_surgery.lab.agents.skrl_safety_filter_trainer import SafetyFilterSequentialTrainer
-from spinal_surgery.lab.agents.skrl_actor_critic import StochasticActor, Critic, QNet
+from spinal_surgery.lab.agents.skrl_actor_critic import StochasticActor, Critic, QNet, SharedModel
 import wandb
 from skrl.trainers.torch import SequentialTrainer
 from skrl.memories.torch import RandomMemory
 from skrl.resources.schedulers.torch.kl_adaptive import KLAdaptiveLR
 from skrl.resources.preprocessors.torch.running_standard_scaler import RunningStandardScaler
+from spinal_surgery.tasks.robot_US_guided_surgery.robotic_US_guided_surgery import scene_cfg
 
 # PLACEHOLDER: Extension template (do not remove this comment)
 
@@ -188,11 +189,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # configure and instantiate the skrl runner
     models = {}
     device = env_cfg.sim.device
-    models["policy"] = StochasticActor(env.observation_space, env.action_space, device, clip_actions=False)
-    models["value"] = Critic(env.observation_space, env.action_space, device)
-    models["cost_value"] = Critic(env.observation_space, env.action_space, device)
+    models['policy'] = SharedModel(env.observation_space, env.action_space, device, clip_actions=False)
     models["cost_critic"] = QNet(env.observation_space, env.action_space, device)
-    models["target_cost_value"] = Critic(env.observation_space, env.action_space, device)
+    models["value"] = models["policy"]
     if agent_cfg['learning_rate_scheduler'] == "KLAdaptiveLR":
         agent_cfg["learning_rate_scheduler"] = KLAdaptiveLR
     if agent_cfg['value_preprocessor'] == "RunningStandardScaler":
@@ -212,8 +211,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     )
 
     # Configure and instantiate the RL trainer
-    cfg_trainer = {"timesteps": 1000000, "headless": True}
-    trainer = SafetyFilterSequentialTrainer(cfg=cfg_trainer, env=env, agents=ppol_agent)
+    cfg_trainer = {"timesteps": 200000, "headless": True}
+    trainer = SequentialTrainer(cfg=cfg_trainer, env=env, agents=ppol_agent)
 
     # start training
     trainer.train()

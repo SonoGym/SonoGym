@@ -108,15 +108,15 @@ class SafetyFilterSequentialTrainer(Trainer):
                         for agent, scope in zip(self.agents, self.agents_scope)
                     ]
                 )
-                taken_actions = torch.vstack(
-                    [
-                        agent.act(states[scope[0] : scope[1]], timestep=timestep, timesteps=self.timesteps)[1]
-                        for agent, scope in zip(self.agents, self.agents_scope)
-                    ]
-                )
+                # taken_actions = torch.vstack(
+                #     [
+                #         agent.act(states[scope[0] : scope[1]], timestep=timestep, timesteps=self.timesteps)[1]
+                #         for agent, scope in zip(self.agents, self.agents_scope)
+                #     ]
+                # )
 
                 # step the environments
-                next_states, rewards, terminated, truncated, infos = self.env.step(taken_actions)
+                next_states, rewards, terminated, truncated, infos = self.env.step(org_actions)
 
                 # render scene
                 if not self.headless:
