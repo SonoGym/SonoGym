@@ -81,7 +81,7 @@ def main():
         )
         # lerobot_dataset = LeRobotDataset(
         #     repo_id="yunkao/uspine",
-        #     root="/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/Isaac-robot-US-guided-surgery-v0-single",
+        #     root="/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/Isaac-robot-US-guided-surgery-v0",
         # )
 
     for ep_index in tqdm.tqdm(range(args_cli.num_traj // args_cli.num_envs)):

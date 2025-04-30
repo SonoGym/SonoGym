@@ -59,6 +59,7 @@ class ExpertSurgery:
         tip_to_traj_dist = info['tip_to_traj_dist']
         traj_to_tip_sin = info['traj_to_tip_sin']
         human_to_traj_pos = info['human_to_traj_pos']
+        tip_pos_along_traj = info['tip_pos_along_traj']
 
         # first goal position in human frame
         goal_pos_1 = human_to_traj_pos - human_traj_drct * safe_height
@@ -93,10 +94,12 @@ class ExpertSurgery:
             tip_to_traj_dist < traj_radius,
             traj_to_tip_sin < 0.2
         )
-        outside_traj = torch.logical_not(along_traj)
+        safety_critical = tip_pos_along_traj.reshape((-1,)) > - safe_height.reshape((-1,))
+        insert_goal = torch.logical_or(along_traj, safety_critical)
+        outside_patient = torch.logical_not(insert_goal)
         tip_pos_diff = torch.zeros_like(tip_pos_diff_1, device=self.device)
-        tip_pos_diff[outside_traj] = tip_pos_diff_1[outside_traj]
-        tip_pos_diff[along_traj] = tip_pos_diff_2[along_traj]
+        tip_pos_diff[outside_patient] = tip_pos_diff_1[outside_patient]
+        tip_pos_diff[insert_goal] = tip_pos_diff_2[insert_goal]
 
         # TODO: debug
         # tip_pos_diff = torch.zeros_like(tip_pos_diff, device=self.device)

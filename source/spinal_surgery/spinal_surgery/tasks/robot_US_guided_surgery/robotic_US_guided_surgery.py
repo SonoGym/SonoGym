@@ -718,6 +718,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.extras['tip_to_traj_dist'] = self.tip_to_traj_dist
         self.extras['traj_to_tip_sin'] = self.traj_to_tip_sin
         self.extras['human_to_traj_pos'] = self.vertebra_viewer.human_to_traj_pos
+        self.extras['tip_pos_along_traj'] = self.tip_pos_along_traj
 
         return reward 
     
@@ -887,6 +888,7 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         self.extras['tip_to_traj_dist'] = self.tip_to_traj_dist
         self.extras['traj_to_tip_sin'] = self.traj_to_tip_sin
         self.extras['human_to_traj_pos'] = self.vertebra_viewer.human_to_traj_pos
+        self.extras['tip_pos_along_traj'] = self.tip_pos_along_traj
         self.extras['cost'] = torch.zeros(self.scene.num_envs, device=self.sim.device)
 
     def check_nan(self):

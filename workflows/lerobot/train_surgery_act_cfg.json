@@ -18,7 +18,7 @@
         "chunk_size": 100,
 
         "vision_backbone": "resnet18",
-        "pretrained_backbone_weights": "ResNet18_Weights.IMAGENET1K_V1",
+        "pretrained_backbone_weights": "null",
         "replace_final_stride_with_dilation": false,
         "pre_norm": false,
 
@@ -43,10 +43,34 @@
             "ACTION": "MEAN_STD"
         },
         "input_features": {
-            "observation.images": {
+            "observation.images.slice_0": {
                 "type": "VISUAL",
                 "shape": [
-                    250, 185, 3
+                    50, 37, 3
+                ]
+            },
+            "observation.images.slice_1": {
+                "type": "VISUAL",
+                "shape": [
+                    50, 37, 3
+                ]
+            },
+            "observation.images.slice_2": {
+                "type": "VISUAL",
+                "shape": [
+                    50, 37, 3
+                ]
+            },
+            "observation.images.slice_3": {
+                "type": "VISUAL",
+                "shape": [
+                    50, 37, 3
+                ]
+            },
+            "observation.images.slice_4": {
+                "type": "VISUAL",
+                "shape": [
+                    50, 37, 3
                 ]
             },
             "observation.state": {
