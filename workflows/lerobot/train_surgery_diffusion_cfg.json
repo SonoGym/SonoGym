@@ -1,6 +1,6 @@
 {
     "dataset": {
-        "root": "/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/Isaac-robot-US-guided-surgery-v0",
+        "root": "/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/Isaac-robot-US-guided-surgery-v0-single-new",
         "repo_id": "yunkao/us-surgery",
         "revision": "v2",
         "episodes": null,

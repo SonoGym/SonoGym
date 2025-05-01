@@ -14,7 +14,7 @@ parameters:
   agent.mini_batches: 
     values: [32]
   agent.learning_epochs: 
-    values: [5]
+    values: [3]
 
 command:
   - /isaac-sim/python.sh

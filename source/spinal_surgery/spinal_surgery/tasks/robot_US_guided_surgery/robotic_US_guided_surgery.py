@@ -43,6 +43,9 @@ from gymnasium.spaces import Dict
 import wandb
 
 scene_cfg = YAML().load(open(f"{PACKAGE_DIR}/tasks/robot_US_guided_surgery/cfgs/robotic_US_guided_surgery.yaml", 'r'))
+# TODO: fix observation scale
+if scene_cfg['sim']['us'] == 'net':
+    scene_cfg['observation']['scale'] = scene_cfg['observation']['scale_net']
 us_cfg = YAML().load(open(f"{PACKAGE_DIR}/lab/sensors/cfgs/us_cfg.yaml", 'r'))
 us_generative_cfg = YAML().load(open(f"{PACKAGE_DIR}/lab/sensors/cfgs/us_generative_cfg.yaml", 'r'))
 # robot
@@ -628,6 +631,8 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
             torch.abs(self.last_max_tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
             - torch.abs(self.max_tip_pos_along_traj[safe_close] - self.vertebra_viewer.traj_half_length[safe_close])
         )
+
+        
         # print('')
         # print('max_tip_pos_along_traj', self.max_tip_pos_along_traj)
         # print('last_max_tip_pos_along_traj', self.last_max_tip_pos_along_traj)
@@ -670,6 +675,15 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
         # print('last_traj_to_tip_sin', self.last_traj_to_tip_sin)
         # reward -= penalty * self.w_penalty
         reward -= penalty * self.w_cost
+
+        # TODO: record total distance
+        self.total_dist = torch.sqrt(
+            torch.abs(self.tip_pos_along_traj - self.vertebra_viewer.traj_half_length)**2
+            + self.tip_to_traj_dist
+        )
+        self.angle = torch.asin(self.traj_to_tip_sin) * 180 / torch.pi
+        self.insert_err = torch.abs(self.tip_pos_along_traj - self.vertebra_viewer.traj_half_length)
+        self.inserted = (self.tip_pos_along_traj > - self.vertebra_viewer.traj_half_length).reshape((-1,))
 
         self.last_tip_pos_along_traj = copy.deepcopy(self.tip_pos_along_traj)
         self.last_tip_to_traj_dist = copy.deepcopy(self.tip_to_traj_dist)
@@ -863,8 +877,12 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
             wandb.log({'total_insertion': self.total_insertion.mean().item()})
             wandb.log({'last_sin': self.last_traj_to_tip_sin.mean().item()})
             wandb.log({'last_dist': self.last_tip_to_traj_dist.mean().item()})
+            wandb.log({'last_angle': self.angle.mean().item()})
+            wandb.log({'last_total_dist': self.total_dist.mean().item()})
+            wandb.log({'last_insert_err': self.insert_err[self.inserted].mean().item()})
 
         self.last_tip_to_traj_dist = copy.deepcopy(self.tip_to_traj_dist)
+        self.last_total_dist = torch.zeros(self.scene.num_envs, device=self.sim.device)
         self.last_traj_to_tip_sin = copy.deepcopy(self.traj_to_tip_sin)
         self.last_unsafe = torch.zeros(self.scene.num_envs, device=self.sim.device)
         self.last_safe_close = torch.zeros(self.scene.num_envs, device=self.sim.device)

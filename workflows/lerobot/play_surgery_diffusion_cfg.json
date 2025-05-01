@@ -91,7 +91,7 @@
             "action": {
                 "type": "ACTION",
                 "shape": [
-                    3
+                    6
                 ]
             }
         }

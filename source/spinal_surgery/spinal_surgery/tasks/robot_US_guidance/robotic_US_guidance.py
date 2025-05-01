@@ -38,6 +38,9 @@ import cProfile
 import wandb
 
 scene_cfg = YAML().load(open(f"{PACKAGE_DIR}/tasks/robot_US_guidance/cfgs/robotic_US_guidance.yaml", 'r'))
+# TODO: fix observation scale
+if scene_cfg['sim']['us'] == 'net':
+    scene_cfg['observation']['scale'] = scene_cfg['observation']['scale_net']
 
 # robot
 robot_cfg = scene_cfg['robot']
@@ -430,13 +433,13 @@ class roboticUSEnv(DirectRLEnv):
             self.world_to_human_pos, self.world_to_human_rot,
             self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
         )
-        cur_cmd_pose = self.gt_motion_generator.human_cmd_state_from_ee_pose(cur_human_ee_pos, cur_human_ee_quat)
+        self.cur_cmd_pose = self.gt_motion_generator.human_cmd_state_from_ee_pose(cur_human_ee_pos, cur_human_ee_quat)
         # gt_cmd, gt_cmd_pose = self.gt_motion_generator.generate_gt_human_cmd(cur_cmd_pose)
         # print(cur_cmd_pose)
 
         # add reward for getting closer to the target
-        cur_distance_to_goal = torch.norm(cur_cmd_pose[:, 0:2] - self.goal_cmd_pose[:, 0:2], dim=-1) * 0.03
-        cur_distance_to_goal += torch.norm(cur_cmd_pose[:, 2:3] - self.goal_cmd_pose[:, 2:3], dim=-1)
+        cur_distance_to_goal = torch.norm(self.cur_cmd_pose[:, 0:2] - self.goal_cmd_pose[:, 0:2], dim=-1) * 0.03
+        cur_distance_to_goal += torch.norm(self.cur_cmd_pose[:, 2:3] - self.goal_cmd_pose[:, 2:3], dim=-1)
 
         reward = self.distance_to_goal - cur_distance_to_goal
 
@@ -449,7 +452,7 @@ class roboticUSEnv(DirectRLEnv):
         # print(self.total_reward)
 
         # record current cmd pose
-        self.extras["cur_cmd_pose"] = cur_cmd_pose
+        self.extras["cur_cmd_pose"] = self.cur_cmd_pose
         # record current goal pose
         self.extras["goal_cmd_pose"] = self.goal_cmd_pose
 
@@ -567,6 +570,10 @@ class roboticUSEnv(DirectRLEnv):
         if hasattr(self, 'total_reward'):
             wandb.log({'total_reward': self.total_reward.mean().item()})
             wandb.log({'distance_to_goal': self.distance_to_goal.mean().item()})
+            wandb.log({'pos err': (torch.norm(self.cur_cmd_pose[:, 0:2] - self.goal_cmd_pose[:, 0:2], dim=-1)
+                                   * self.US_slicer.label_res).mean().item()})
+            wandb.log({'rot err': (torch.norm(self.cur_cmd_pose[:, 2:3] - self.goal_cmd_pose[:, 2:3], dim=-1)
+                                   * 180 / torch.pi).mean().item()})
             
         # init distance to goal
         if self.use_vertebra_goal:

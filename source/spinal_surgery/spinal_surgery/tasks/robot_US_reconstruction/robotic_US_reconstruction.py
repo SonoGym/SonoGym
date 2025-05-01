@@ -342,7 +342,7 @@ class roboticUSRecEnv(DirectRLEnv):
 
         total_l = self.rew_cfg['action_length']['w_pos'] * pos_l + self.rew_cfg['action_length']['w_angle'] * rot_l
 
-        return total_l
+        return total_l, pos_l, rot_l
 
 
     def _get_observations(self) -> dict:
@@ -432,14 +432,17 @@ class roboticUSRecEnv(DirectRLEnv):
     def _get_rewards(self) -> torch.Tensor:
         reward = 0
         # length of path
-        self.act_l = self.get_action_length(self.actions)
+        self.act_l, self.pos_l, self.rot_l = self.get_action_length(self.actions)
 
         # current coverage
         reward += self.rew_cfg['incremental_cov'] * self.surface_reconstructor.incremental_cov
         reward -= self.act_l
 
         self.total_length += self.act_l
+        self.total_pos_l += self.pos_l
+        self.total_rot_l += self.rot_l
         self.total_reward += reward
+        self.cov_ratio = self.surface_reconstructor.get_converage_ratio()
         # print(self.total_reward)
         # print(self.surface_reconstructor.cur_cov)
         # print(self.total_length)
@@ -558,8 +561,14 @@ class roboticUSRecEnv(DirectRLEnv):
         )
         if hasattr(self, 'total_reward'):
             wandb.log({'total_reward': self.total_reward.mean().item()})
+            wandb.log({'total_length': self.total_length.mean().item()})
+            wandb.log({'cov_ratio': self.cov_ratio.mean().item()})
+            wandb.log({'total_pos_l': self.total_pos_l.mean().item()})
+            wandb.log({'total_rot_l': self.total_rot_l.mean().item()})
         self.total_reward = torch.zeros(self.scene.num_envs, device=self.sim.device)
         self.total_length = torch.zeros(self.scene.num_envs, device=self.sim.device)
+        self.total_rot_l = torch.zeros(self.scene.num_envs, device=self.sim.device)
+        self.total_pos_l = torch.zeros(self.scene.num_envs, device=self.sim.device)
 
         # reset the surface reconstructor
         self.surface_reconstructor.reset()

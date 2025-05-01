@@ -64,7 +64,7 @@ def main(cfg: EvalPipelineConfig):
     # Simulate physics
     while simulation_app.is_running():
         # reset
-        if count % 420 == 0:
+        if count % 100000 == 0:
             # reset counters
             sim_time = 0.0
             count = 0
