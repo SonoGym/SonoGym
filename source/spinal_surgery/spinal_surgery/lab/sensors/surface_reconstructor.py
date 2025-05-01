@@ -155,12 +155,12 @@ class SurfaceReconstructor(LabelImgSlicer):
 
             volume_vertbebra_points = human_vertebra_points * self.label_res - self.human_rec_volume_corner[i, :]  # (P, 3)
             volume_vertbebra_points = volume_vertbebra_points / self.volume_res  # (P, 3)
+            volume_vertbebra_points = volume_vertbebra_points.to(torch.int)
             volume_vertbebra_points = torch.clamp(
                 volume_vertbebra_points, 
                 torch.zeros_like(volume_vertbebra_points, device=self.device), 
                 max=self.volume_size.reshape((1, -1)).repeat(volume_vertbebra_points.shape[0], 1) - 1
             )
-            volume_vertbebra_points = volume_vertbebra_points.to(torch.int)
             volume_vertbebra_points = volume_vertbebra_points[volume_vertbebra_points[:, 1] < self.volume_size[2] // 2, :] # (P, 3)
 
             upper_surface_volume[volume_vertbebra_points[:, 0],
@@ -328,13 +328,40 @@ class SurfaceReconstructor(LabelImgSlicer):
 
         return self.cur_cov / upper_surface_per_env  # (N,)
 
-
     def update_cmd(self, d_x_z_z_y_angle):
         # update x, z, position and y angle
         super().update_cmd(d_x_z_z_y_angle[:, 0:3])
         # update  roll_adujst
         self.roll_adj += d_x_z_z_y_angle[:, 3:4]
         self.roll_adj = torch.clamp(self.roll_adj, min=-self.max_roll_adj, max=self.max_roll_adj)
+
+    def human_cmd_state_from_ee_pose(self, human_to_target_pos, human_to_target_quat):
+        '''
+        convert ee_pose to human command'''
+        
+        rot_mat = matrix_from_quat(human_to_target_quat)
+        z_axis = rot_mat[:, :, 2]  # (num_envs, 3)
+        x_axis = rot_mat[:, :, 0]  # (num_envs, 3)
+        angle_y = torch.atan2(x_axis[:, 2], x_axis[:, 0])  # (num_envs)
+
+        pos = human_to_target_pos + z_axis * self.height
+        x_z = pos[:, [0, 2]] / self.label_res
+
+        # compute real roll adjustment
+        y_axis = rot_mat[:, :, 1]  # (num_envs, 3)
+        suface_normal = torch.zeros((self.num_envs, 3), device=self.device)
+        for i in range(self.n_human_types):
+            cur_x = x_z[i::self.n_human_types, 0]  # (num_envs / n, 3)
+            cur_z = x_z[i::self.n_human_types, 1]  # (num_envs / n, 3)
+            cur_x = torch.clamp(cur_x, min=0, max=self.label_maps[i].shape[0] - 1)
+            cur_z = torch.clamp(cur_z, min=0, max=self.label_maps[i].shape[2] - 1)
+            
+            normal = self.surface_normal_list[i][cur_x.int(), cur_z.int(), :]  # (num_envs / n, 3)
+            suface_normal[i::self.n_human_types, :] = normal
+        sin_angle = torch.sum(torch.cross(suface_normal, y_axis) * z_axis, dim=-1)  # cross product and dot
+        angle_z = torch.asin(sin_angle)  # (num_envs)
+
+        return torch.cat([x_z, angle_y.unsqueeze(-1), angle_z.unsqueeze(-1)], dim=-1)  # (num_envs, 3)
 
     def reset(self):
         volume_size = self.volume_size.int().cpu().numpy()

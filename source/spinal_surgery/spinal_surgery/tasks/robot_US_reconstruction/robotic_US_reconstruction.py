@@ -116,7 +116,7 @@ class roboticUSRecEnvCfg(DirectRLEnvCfg):
     )
 
     # scene
-    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=100, env_spacing=4.0, replicate_physics=False)
+    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=100, env_spacing=2.0, replicate_physics=False)
 
 
 class roboticUSRecEnv(DirectRLEnv):
@@ -343,6 +343,15 @@ class roboticUSRecEnv(DirectRLEnv):
         total_l = self.rew_cfg['action_length']['w_pos'] * pos_l + self.rew_cfg['action_length']['w_angle'] * rot_l
 
         return total_l, pos_l, rot_l
+    
+    def get_traj_length(self, last_cmd_pose: torch.Tensor, cur_cmd_pose: torch.Tensor):
+        # compute position and rotation
+        pos_l = torch.linalg.norm(cur_cmd_pose[:, 0:2] - last_cmd_pose[:, 0:2], dim=-1)
+        rot_l = torch.linalg.norm(cur_cmd_pose[:, 2:] - last_cmd_pose[:, 2:], dim=-1)
+
+        total_l = self.rew_cfg['action_length']['w_pos'] * pos_l + self.rew_cfg['action_length']['w_angle'] * rot_l
+
+        return total_l, pos_l, rot_l
 
 
     def _get_observations(self) -> dict:
@@ -433,16 +442,24 @@ class roboticUSRecEnv(DirectRLEnv):
         reward = 0
         # length of path
         self.act_l, self.pos_l, self.rot_l = self.get_action_length(self.actions)
+        cmd_state = self.surface_reconstructor.human_cmd_state_from_ee_pose(
+            self.human_to_ee_pos, self.human_to_ee_quat
+        )
+        self.total_l, self.pos_l, self.rot_l = self.get_traj_length(
+            self.cmd_state, cmd_state
+        )
 
+        
         # current coverage
         reward += self.rew_cfg['incremental_cov'] * self.surface_reconstructor.incremental_cov
-        reward -= self.act_l
+        reward -= self.total_l
 
         self.total_length += self.act_l
         self.total_pos_l += self.pos_l
         self.total_rot_l += self.rot_l
         self.total_reward += reward
         self.cov_ratio = self.surface_reconstructor.get_converage_ratio()
+        self.cmd_state = cmd_state
         # print(self.total_reward)
         # print(self.surface_reconstructor.cur_cov)
         # print(self.total_length)
@@ -558,6 +575,9 @@ class roboticUSRecEnv(DirectRLEnv):
         # actions: dx, dz: in image frame
         self.human_to_ee_pos, self.human_to_ee_quat = subtract_frame_transforms(
             self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
+        )
+        self.cmd_state = self.surface_reconstructor.human_cmd_state_from_ee_pose(
+            self.human_to_ee_pos, self.human_to_ee_quat
         )
         if hasattr(self, 'total_reward'):
             wandb.log({'total_reward': self.total_reward.mean().item()})

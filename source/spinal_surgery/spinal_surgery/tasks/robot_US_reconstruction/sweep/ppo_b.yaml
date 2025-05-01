@@ -2,7 +2,7 @@
 # Running the following command under the hood:
 
 program: scripts/reinforcement_learning/skrl/train.py
-description: "recontruction_PPO_sweep_5_human"
+description: "recontruction_PPO_sweep_1_human"
 name: recontruction_PPO_sweep
 method: bayes
 metric:
