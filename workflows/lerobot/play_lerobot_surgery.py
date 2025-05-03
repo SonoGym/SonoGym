@@ -41,7 +41,7 @@ def main(cfg: EvalPipelineConfig):
     from isaaclab_tasks.utils import get_checkpoint_path, load_cfg_from_registry, parse_env_cfg
     import wandb
     import numpy as np
-    from spinal_surgery.tasks.robot_US_guidance.robotic_US_guidance import scene_cfg
+    from spinal_surgery.tasks.robot_US_guided_surgery.robotic_US_guided_surgery import scene_cfg
 
     def get_surgery_policy_input(obs):
         image = obs['policy']['image']
@@ -102,7 +102,7 @@ def main(cfg: EvalPipelineConfig):
     # Simulate physics
     while simulation_app.is_running():
         # reset
-        if count % 1000 == 0:
+        if count % 1000000 == 0:
             # reset counters
             sim_time = 0.0
             count = 0

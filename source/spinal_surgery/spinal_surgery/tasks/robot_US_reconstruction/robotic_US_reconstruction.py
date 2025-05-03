@@ -463,6 +463,10 @@ class roboticUSRecEnv(DirectRLEnv):
         # print(self.total_reward)
         # print(self.surface_reconstructor.cur_cov)
         # print(self.total_length)
+        # record infor
+        self.extras["human_to_ee_pos"] = self.human_to_ee_pos
+        self.extras["human_to_ee_quat"] = self.human_to_ee_quat
+        self.extras["cur_cmd_state"] = self.cmd_state
 
         return reward 
     
@@ -592,6 +596,11 @@ class roboticUSRecEnv(DirectRLEnv):
 
         # reset the surface reconstructor
         self.surface_reconstructor.reset()
+
+         # record infor
+        self.extras["human_to_ee_pos"] = self.human_to_ee_pos
+        self.extras["human_to_ee_quat"] = self.human_to_ee_quat
+        self.extras["cur_cmd_state"] = self.cmd_state
 
     def check_nan(self):
         if torch.isnan(self.US_ee_pos_b).any() or torch.isnan(self.US_ee_quat_b).any():

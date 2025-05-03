@@ -102,7 +102,7 @@ def main():
                 observation = obs['policy'].cpu().numpy()
                 action = actions.cpu().numpy()
                 stacked_frame = {
-                    "observation": np.clip(observation * 30, 0.0, 1.0),  # *30 for 0.02 scale net guidance, 
+                    "observation": np.clip(observation, 0.0, 1.0),  # *30 for 0.02 scale net guidance, 
                     "action": action,
                     'task': GUIDANCE_TASK,
                 }
