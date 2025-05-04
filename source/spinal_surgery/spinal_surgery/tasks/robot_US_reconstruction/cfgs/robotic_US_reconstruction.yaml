@@ -49,3 +49,6 @@ sim:
   vis_us: False
   vis_rec: True
   vis_seg_map: False
+
+if_record_traj: True
+record_path: /recordings/robot_US_reconstruction/

@@ -35,6 +35,7 @@ from spinal_surgery.lab.kinematics.gt_motion_generator import GTMotionGenerator,
 
 import cProfile
 from gymnasium.spaces import Dict
+import os
 
 scene_cfg = YAML().load(open(f"{PACKAGE_DIR}/tasks/robot_US_reconstruction/cfgs/robotic_US_reconstruction.yaml", 'r'))
 
@@ -468,6 +469,9 @@ class roboticUSRecEnv(DirectRLEnv):
         self.extras["human_to_ee_quat"] = self.human_to_ee_quat
         self.extras["cur_cmd_state"] = self.cmd_state
 
+        if scene_cfg['if_record_traj']:
+            self.cmd_pose_trajs.append(self.cmd_state)
+
         return reward 
     
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
@@ -597,10 +601,20 @@ class roboticUSRecEnv(DirectRLEnv):
         # reset the surface reconstructor
         self.surface_reconstructor.reset()
 
-         # record infor
+        # record infor
         self.extras["human_to_ee_pos"] = self.human_to_ee_pos
         self.extras["human_to_ee_quat"] = self.human_to_ee_quat
         self.extras["cur_cmd_state"] = self.cmd_state
+
+        if scene_cfg['if_record_traj']:
+            record_path = PACKAGE_DIR + scene_cfg['record_path']
+            if hasattr(self, 'cmd_pose_trajs'):
+                if not os.path.exists(record_path):
+                    os.makedirs(record_path)
+                self.cmd_pose_trajs = torch.stack(self.cmd_pose_trajs, dim=1)
+                torch.save(self.cmd_pose_trajs, record_path + 'cmd_pose_trajs.pt')
+                torch.save(self.vertebra_viewer.human_to_ver_per_envs, record_path + 'human_to_ver.pt')
+            self.cmd_pose_trajs = [self.cmd_state]
 
     def check_nan(self):
         if torch.isnan(self.US_ee_pos_b).any() or torch.isnan(self.US_ee_quat_b).any():

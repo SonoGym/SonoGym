@@ -95,8 +95,12 @@ class ExpertSurgery:
             traj_to_tip_sin < 0.2
         )
         safety_critical = tip_pos_along_traj.reshape((-1,)) > - safe_height.reshape((-1,))
+        # TODO: for collect dataset
         insert_goal = torch.logical_or(along_traj, safety_critical)
+        # TODO for real expert:
+        insert_goal = along_traj
         outside_patient = torch.logical_not(insert_goal)
+
         tip_pos_diff = torch.zeros_like(tip_pos_diff_1, device=self.device)
         tip_pos_diff[outside_patient] = tip_pos_diff_1[outside_patient]
         tip_pos_diff[insert_goal] = tip_pos_diff_2[insert_goal]

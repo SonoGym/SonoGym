@@ -69,10 +69,11 @@ def main():
         ratio=[0.05, 0.05, 0.05, 0.0], 
         device=env.sim.device)
 
+    # reset environment
+    obs, info = env.reset()
     for ep_index in tqdm.tqdm(range(args_cli.num_traj // args_cli.num_envs)):
 
-        # reset environment
-        obs, info = env.reset()
+        
         time_out = False
         step = 0
         while time_out is False:

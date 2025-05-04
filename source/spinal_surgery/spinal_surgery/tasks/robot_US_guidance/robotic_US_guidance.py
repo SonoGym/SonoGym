@@ -36,6 +36,7 @@ from spinal_surgery.lab.kinematics.gt_motion_generator import GTMotionGenerator,
 from spinal_surgery.lab.kinematics.vertebra_viewer import VertebraViewer
 import cProfile
 import wandb
+import os
 
 scene_cfg = YAML().load(open(f"{PACKAGE_DIR}/tasks/robot_US_guidance/cfgs/robotic_US_guidance.yaml", 'r'))
 # TODO: fix observation scale
@@ -455,6 +456,8 @@ class roboticUSEnv(DirectRLEnv):
         self.extras["cur_cmd_pose"] = self.cur_cmd_pose
         # record current goal pose
         self.extras["goal_cmd_pose"] = self.goal_cmd_pose
+        if scene_cfg['if_record_traj']:
+            self.cmd_pose_trajs.append(self.cur_cmd_pose)
 
         return reward 
     
@@ -595,6 +598,17 @@ class roboticUSEnv(DirectRLEnv):
         self.extras["cur_cmd_pose"] = self.cur_cmd_pose
         self.extras["goal_cmd_pose"] = self.goal_cmd_pose
 
+        # record trajectory
+        # tensor: (N, T, 3)
+        if scene_cfg['if_record_traj']:
+            record_path = PACKAGE_DIR + scene_cfg['record_path']
+            if hasattr(self, 'cmd_pose_trajs'):
+                if not os.path.exists(record_path):
+                    os.makedirs(record_path)
+                self.cmd_pose_trajs = torch.stack(self.cmd_pose_trajs, dim=1)
+                torch.save(self.cmd_pose_trajs, record_path + 'cmd_pose_trajs.pt')
+                torch.save(self.goal_cmd_pose, record_path + 'goal_cmd_pose.pt')
+            self.cmd_pose_trajs = [self.cur_cmd_pose]
 
 
 
