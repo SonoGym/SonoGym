@@ -1,6 +1,6 @@
 {
     "dataset": {
-        "root": "/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/Isaac-robot-US-guided-surgery-v0-single-new",
+        "root": "/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/Isaac-robot-US-guided-surgery-v0-256-ES10",
         "repo_id": "yunkao/us-surgery",
         "revision": "v2",
         "episodes": null,
@@ -19,7 +19,7 @@
 
         "vision_backbone": "resnet18",
         "crop_shape": [
-            50, 37
+            256, 256
         ],
         "crop_is_random": true,
         "pretrained_backbone_weights": null,
@@ -63,31 +63,31 @@
             "observation.images.slice_0": {
                 "type": "VISUAL",
                 "shape": [
-                    50, 37, 3
+                    256, 256, 3
                 ]
             },
             "observation.images.slice_1": {
                 "type": "VISUAL",
                 "shape": [
-                    50, 37, 3
+                    256, 256, 3
                 ]
             },
             "observation.images.slice_2": {
                 "type": "VISUAL",
                 "shape": [
-                    50, 37, 3
+                    256, 256, 3
                 ]
             },
             "observation.images.slice_3": {
                 "type": "VISUAL",
                 "shape": [
-                    50, 37, 3
+                    256, 256, 3
                 ]
             },
             "observation.images.slice_4": {
                 "type": "VISUAL",
                 "shape": [
-                    50, 37, 3
+                    256, 256, 3
                 ]
             },
             "observation.state": {

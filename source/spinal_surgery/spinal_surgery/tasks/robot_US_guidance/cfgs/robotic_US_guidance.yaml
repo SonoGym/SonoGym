@@ -27,7 +27,7 @@ observation:
   scale_net: 0.1
 action: 
   mode: 'continuous' # 'discrete', 'continuous'
-  scale: [2, 2, 0.1]
+  scale: [0.00002, 0.00002, 0.0001] # [2, 2, 0.1]
   max_action: [4, 4, 0.2]
 
 reward:
@@ -39,8 +39,8 @@ sim:
   patient_xz_init_range: [[100, 70, 1.5], [180, 200, 3.5]]
   if_use_ct: True
   ct_range: [-300, 3000]
-  us: 'net' # 'conv', 'net'
-  vis_us: True
+  us: 'conv' # 'conv', 'net', 'both'
+  vis_us: False
   vis_int: 5
   vis_seg_map: False
 

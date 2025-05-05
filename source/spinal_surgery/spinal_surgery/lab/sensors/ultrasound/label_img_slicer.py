@@ -186,12 +186,12 @@ class LabelImgSlicer(SurfaceMotionPlanner):
             # cv2.imshow("Label Image Update", (combined_img_np.T / np.max(combined_img_np)*255).astype(np.uint8))            
             # cv2.waitKey(0)
             # cv2.destroyAllWindows()
-            plt.figure(1, figsize=(first_n*3, 5))
+            plt.figure(1, figsize=(first_n*2, 3))
             plt.clf()
             plt.imshow((combined_img_np.T / np.max(combined_img_np)*255).astype(np.uint8),cmap='gray')
             plt.pause(0.0001)
 
-        if key=='CT':  # or key=='US':
+        if key=='CT' or key=='US':
 
             combined_ct = self.ct_img_tensor[:first_n, :, :, 0].reshape((first_n * self.img_size[0], self.img_size[1])) # (w * first_n, h)
 
@@ -200,7 +200,7 @@ class LabelImgSlicer(SurfaceMotionPlanner):
             # cv2.imshow("Ct Image Update", (combined_ct_np.T / np.max(combined_ct_np)*255).astype(np.uint8))
             # cv2.waitKey(0)
             # cv2.destroyAllWindows()
-            plt.figure(2, figsize=(first_n*3, 5))
+            plt.figure(2, figsize=(first_n*2, 3))
             plt.clf()
             plt.imshow((combined_ct_np.T / np.max(combined_ct_np)*255).astype(np.uint8), cmap='gray')
             plt.pause(0.0001)

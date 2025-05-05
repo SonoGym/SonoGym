@@ -47,7 +47,8 @@
 
         "normalization_mapping": {
             "STATE": "MEAN_STD",
-            "ACTION": "MEAN_STD"
+            "ACTION": "MEAN_STD",
+            "VISUAL": "MEAN_STD"
         },
         "input_features": {
             "observation.images.slice_0": {

@@ -145,14 +145,14 @@ class VertebraViewer:
         tip_points_b_np = tip_points_ab[:, 1, :].cpu().numpy()
         for i in range(self.num_envs):
             # TODO: change original points
-            # self.tip_line_list[i].points = np.stack([tip_points_a_np[i], 
-            #                                          tip_points_b_np[i]], axis=0)
+            self.tip_line_list[i].points = np.stack([tip_points_a_np[i], 
+                                                     tip_points_b_np[i]], axis=0)
             # TODO: add new points
-            if i % 5 == 0:
-                tip_line = pv.Line(pointa=tip_points_a_np[i], 
-                                   pointb=tip_points_b_np[i], 
-                                   resolution=1)
-                self.p.add_mesh(tip_line, color='green', opacity=0.2)
+            # if i % 5 == 0:
+            #     tip_line = pv.Line(pointa=tip_points_a_np[i], 
+            #                        pointb=tip_points_b_np[i], 
+            #                        resolution=1)
+            #     self.p.add_mesh(tip_line, color='green', opacity=0.2)
             
         self.p.update()
         

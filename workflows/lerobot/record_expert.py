@@ -17,9 +17,9 @@ parser.add_argument(
     "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
 )
 parser.add_argument("--num_envs", type=int, default=64, help="Number of environments to simulate.")
-parser.add_argument("--task", type=str, default='Isaac-robot-US-guidance-v0', help="Name of the task.")
+parser.add_argument("--task", type=str, default='Isaac-robot-US-guided-surgery-v0', help="Name of the task.")
 parser.add_argument("--num_traj", type=int, default=2048, help="Number of environments to simulate.")
-parser.add_argument("--if_record", type=bool, default=False, help="if record data to lerobot")
+parser.add_argument("--if_record", type=bool, default=True, help="if record data to lerobot")
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -47,6 +47,7 @@ from spinal_surgery.tasks.robot_US_guidance.cfgs.lerobot_cfg import *
 from spinal_surgery.tasks.robot_US_guided_surgery.cfgs.lerobot_cfg import *
 import tqdm
 import numpy as np
+import cv2
 
 
 def main():
@@ -72,17 +73,17 @@ def main():
     
     if args_cli.if_record:
         # create lerobot dataset
-        lerobot_dataset = LeRobotDataset.create(
-            repo_id="yunkao/uspine",
-            fps=int(1 / env_cfg.sim.dt),
-            root="/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/" + args_cli.task,
-            robot_type="kuka-med",
-            features=features,
-        )
-        # lerobot_dataset = LeRobotDataset(
+        # lerobot_dataset = LeRobotDataset.create(
         #     repo_id="yunkao/uspine",
-        #     root="/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/Isaac-robot-US-guided-surgery-v0",
+        #     fps=int(1 / env_cfg.sim.dt),
+        #     root="/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/" + args_cli.task,
+        #     robot_type="kuka-med",
+        #     features=features,
         # )
+        lerobot_dataset = LeRobotDataset(
+            repo_id="yunkao/uspine",
+            root="/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/Isaac-robot-US-guided-surgery-v0",
+        )
 
     for ep_index in tqdm.tqdm(range(args_cli.num_traj // args_cli.num_envs)):
 
@@ -142,11 +143,11 @@ def main():
                         video = stacked_frame_list[i]['observation.ultrasound'][ep, ...]  # (25, 50, 37)
                         if video.shape[0] == 25:
                             frame = {
-                                    "observation.images.slice_0": video[0:5:2, :, :].transpose(1, 2, 0),
-                                    "observation.images.slice_1": video[5:10:2, :, :].transpose(1, 2, 0),
-                                    "observation.images.slice_2": video[10:15:2, :, :].transpose(1, 2, 0),
-                                    "observation.images.slice_3": video[15:20:2, :, :].transpose(1, 2, 0),
-                                    "observation.images.slice_4": video[20:25:2, :, :].transpose(1, 2, 0),
+                                    "observation.images.slice_0": cv2.resize(video[0:5:2, :, :].transpose(1, 2, 0), (256, 256)),
+                                    "observation.images.slice_1": cv2.resize(video[5:10:2, :, :].transpose(1, 2, 0), (256, 256)),
+                                    "observation.images.slice_2": cv2.resize(video[10:15:2, :, :].transpose(1, 2, 0), (256, 256)),
+                                    "observation.images.slice_3": cv2.resize(video[15:20:2, :, :].transpose(1, 2, 0), (256, 256)),
+                                    "observation.images.slice_4": cv2.resize(video[20:25:2, :, :].transpose(1, 2, 0), (256, 256)),
                                     "observation.state": state,
                                     "action": stacked_frame_list[i]['action'][ep, :],
                                     'task': SURGERY_TASK,
