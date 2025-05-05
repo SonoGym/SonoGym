@@ -80,7 +80,7 @@ def main(cfg: EvalPipelineConfig):
     env_cfg = parse_env_cfg(
         "Isaac-robot-US-guided-surgery-v0", 
         device="cuda", 
-        num_envs=64, 
+        num_envs=100, 
         use_fabric=True
     )
 

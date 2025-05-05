@@ -44,6 +44,10 @@ class USSlicer(LabelImgSlicer):
         elif self.sim_mode=='net':
             self.us_sim = USSimulatorNetwork(us_generative_cfg, device=device)
             self.e_down = us_generative_cfg['elevation_downsample']
+        elif self.sim_mode=='both':
+            self.us_sim = USSimulatorNetwork(us_generative_cfg, device=device)
+            self.us_sim_mb = USSimulatorConv(us_cfg, device=device)
+            self.e_down = us_generative_cfg['elevation_downsample']
 
         self.us_cfg = us_cfg
         self.if_use_ct = if_use_ct
@@ -199,7 +203,7 @@ class USSlicer(LabelImgSlicer):
     def slice_US(self, world_to_human_pos, world_to_human_quat, world_to_ee_pos, world_to_ee_quat):
         self.slice_label_img(world_to_human_pos, world_to_human_quat, world_to_ee_pos, world_to_ee_quat)
         
-        if self.sim_mode=='conv':
+        if self.sim_mode=='conv' or self.sim_mode=='both':
             self.slice_rand_maps(world_to_human_pos, world_to_human_quat, world_to_ee_pos, world_to_ee_quat)
             # reshape images for simulation
             label_img_tensor = self.label_img_tensor.permute(0, 3, 2, 1).reshape((-1, self.img_size[1], self.img_size[0])) # (n*e, H, W)
@@ -217,15 +221,22 @@ class USSlicer(LabelImgSlicer):
                 False,
                 self.if_use_ct,
                 ct_img_tensor) # (n*e, H, W)
-        else:
+        elif self.sim_mode=='net' or self.sim_mode=='both':
             ct_img_tensor = self.ct_img_tensor.permute(0, 3, 1, 2) # (n*e, W, H)
             if ct_img_tensor.shape[1] > 1: # only for 3d us
                 ct_img_tensor = ct_img_tensor[:, ::self.e_down, :, :].reshape((-1, self.img_size[0], self.img_size[1]))
             else:
                 ct_img_tensor = ct_img_tensor.reshape((-1, self.img_size[0], self.img_size[1]))
-            self.us_img_tensor = self.us_sim.simulate_US_image(ct_img_tensor.unsqueeze(1)).permute((0, 1, 3, 2)) # (n*e, 1, W, H)
+            if self.sim_mode=='both':
+                self.us_net_img_tensor = self.us_sim.simulate_US_image(ct_img_tensor.unsqueeze(1)).permute((0, 1, 3, 2)) # (n*e, 1, W, H)
+            else:
+                self.us_img_tensor = self.us_sim.simulate_US_image(ct_img_tensor.unsqueeze(1)).permute((0, 1, 3, 2)) # (n*e, 1, W, H)
+        
             # self.ct_img_tensor = ct_img_tensor.reshape((self.num_envs, -1, self.img_size[0], self.img_size[1])).permute(0, 2, 3, 1) # (n*e, W, H)
-        self.us_img_tensor = self.us_img_tensor.reshape((self.num_envs, -1, self.img_size[1], self.img_size[0])).permute(0, 2, 3, 1) # (n, H, W, e)
+        if self.sim_mode=='both':
+            self.us_net_img_tensor = self.us_img_tensor.reshape((self.num_envs, -1, self.img_size[1], self.img_size[0])).permute(0, 2, 3, 1)
+        else:
+            self.us_img_tensor = self.us_img_tensor.reshape((self.num_envs, -1, self.img_size[1], self.img_size[0])).permute(0, 2, 3, 1) # (n, H, W, e)
 
 
     def visualize(self, key, first_n=10):
@@ -239,21 +250,32 @@ class USSlicer(LabelImgSlicer):
 
             combined_img_np = combined_US_img.cpu().numpy()
 
+            if self.sim_mode=='both':
+                combined_US_img_net = self.us_nez_img_tensor[:first_n, :, :, 0].permute(0, 2, 1).reshape((-1, self.img_size[1])) # (w * first_n, h)
+
+                combined_img_np_net = combined_US_img_net.cpu().numpy()
+
             # if self.sim_mode=='conv':
             #     cv2.imshow("US Image Update", ((combined_img_np.T / 20)*255).astype(np.uint8))
             # else:
             #     cv2.imshow("US Image Update", (combined_img_np.T / np.max(combined_img_np)*255).astype(np.uint8))
             # cv2.waitKey(0)
             # cv2.destroyAllWindows()
-            if self.sim_mode=='conv':
+            if self.sim_mode=='conv' or self.sim_mode=='both':
                 plt.figure(3, figsize=(first_n*2, 3))
                 plt.clf()
                 plt.imshow((combined_img_np.T / 30*255).astype(np.uint8),cmap='gray')
                 plt.pause(0.0001)
-            else:
+            elif self.sim_mode=='net':
                 plt.figure(3, figsize=(first_n*2, 3))
                 plt.clf()
                 plt.imshow((combined_img_np.T / np.max(combined_img_np)*255).astype(np.uint8),cmap='gray')
+                plt.pause(0.0001)
+
+            if self.sim_mode=='both':
+                plt.figure(4, figsize=(first_n*2, 3))
+                plt.clf()
+                plt.imshow((combined_img_np_net.T / np.max(combined_img_np_net)*255).astype(np.uint8),cmap='gray')
                 plt.pause(0.0001)
         
 
