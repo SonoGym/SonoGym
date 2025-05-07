@@ -1,4 +1,4 @@
-# Template for Isaac Lab Projects
+# UltraLab: High Performance Simulation for Robotic Ultrasound and Ultrasound-Guided Spinal Surgery
 
 [![IsaacSim](https://img.shields.io/badge/IsaacSim-4.5.0-silver.svg)](https://docs.omniverse.nvidia.com/isaacsim/latest/overview.html)
 [![Isaac Lab](https://img.shields.io/badge/IsaacLab-2.0.0-silver)](https://isaac-sim.github.io/IsaacLab)
@@ -10,37 +10,27 @@
 
 ## Overview
 
-This repository serves as a template for building projects or extensions based on Isaac Lab. It allows you to develop in an isolated environment, outside of the core Isaac Lab repository.
+![overview image](overview.png)
 
-**Key Features:**
-
-- `Isolation` Work outside the core Isaac Lab repository, ensuring that your development efforts remain self-contained.
-- `Flexibility` This template is set up to allow your code to be run as an extension in Omniverse.
-
-**Keywords:** extension, template, isaaclab
+UltraLab provide model-based and learning-based ultrasound (US) simulation based on 3D label map and CT scans from real patient datasets.
+Our tasks include US navigation, bone surface reconstruction, and US-guided robotic surgery. 
+Our platform enables benchmarking of various algorithms, including reinforcement learning (RL), safe RL, and imitation learning.
+%
 
 ## Installation
-
+### Install codes
 - Install Isaac Lab by following the [installation guide](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/index.html). We recommend using the conda installation as it simplifies calling Python scripts from the terminal.
 
 - Clone this repository separately from the Isaac Lab installation (i.e. outside the `IsaacLab` directory):
 
 ```bash
 # Option 1: HTTPS
-git clone https://github.com/isaac-sim/IsaacLabExtensionTemplate.git
+git clone https://github.com/ToolManChang/isaaclab_ultrasound_surgery.git
 
 # Option 2: SSH
-git clone git@github.com:isaac-sim/IsaacLabExtensionTemplate.git
+git clone git@github.com:ToolManChang/isaaclab_ultrasound_surgery.git
 ```
 
-- Throughout the repository, the name `spinal_surgery` only serves as an example and we provide a script to rename all the references to it automatically:
-
-```bash
-# Enter the repository
-cd IsaacLabExtensionTemplate
-# Rename all occurrences of spinal_surgery (in files/directories) to your_fancy_extension_name
-python scripts/rename_template.py your_fancy_extension_name
-```
 
 - Using a python interpreter that has Isaac Lab installed, install the library
 
@@ -48,36 +38,78 @@ python scripts/rename_template.py your_fancy_extension_name
 python -m pip install -e source/spinal_surgery
 ```
 
-- Verify that the extension is correctly installed by running the following command:
+### Download the dataset and models
 
-```bash
-python scripts/rsl_rl/train.py --task=Template-Isaac-Velocity-Rough-Anymal-D-v0
+The folder contains 3 groups of large files:
+- assets: simulation assets including medical imaging, human models, and robot.
+- models: pix2pix models for learning-based ultrasound simulation.
+- lerobot-dataset: datasets allow training imitation learning policies with lerobot repo (https://github.com/huggingface/lerobot), not necessary for training RL agents.
+
+Put the downloaded directories in the following path respectively:
+```
+UltraLab_assets_models/assets -> isaaclab_ultrasound_surgery/source/spinal_surgery/spinal_surgery/assets
+UltraLab_assets_models/models -> isaaclab_ultrasound_surgery/models
+UltraLab_assets_models/lerobot-dataset -> isaaclab_ultrasound_surgery/lerobot-dataset
 ```
 
-### Set up IDE (Optional)
+## Training and testing
 
-To setup the IDE, please follow these instructions:
+### Training with default settings
 
-- Run VSCode Tasks, by pressing `Ctrl+Shift+P`, selecting `Tasks: Run Task` and running the `setup_python_env` in the drop down menu. When running this task, you will be prompted to add the absolute path to your Isaac Sim installation.
+You can train PPO agent with skrl with the following command:
 
-If everything executes correctly, it should create a file .python.env in the `.vscode` directory. The file contains the python paths to all the extensions provided by Isaac Sim and Omniverse. This helps in indexing all the python modules for intelligent suggestions while writing code.
+```bash
+python workflows/skrl/train.py --task=Isaac-robot-US-guidance-v0
+```
+Task ids can be chosen from
+- Isaac-robot-US-guidance-v0
+- Isaac-robot-US-guided-surgery-v0
+- Isaac-robot-US-reconstruction-v0
 
-### Setup as Omniverse Extension (Optional)
+You can also train PPO with a cost predictor only for ```Isaac-robot-US-guided-surgery-v0``` with the following command:
+```bash
+python workflows/skrl/train_sppo.py
+```
 
-We provide an example UI extension that will load upon enabling your extension defined in `source/spinal_surgery/spinal_surgery/ui_extension_example.py`.
+After downloading the lerobot-dataset, you can also train ACT or diffusion policy with:
 
-To enable your extension, follow these steps:
+```bash
+python /path-to-lerobot/lerobot/scripts/train.py --config_path=workflows/lerobot/train_surgery_{method}_cfg.json
+```
+where ```method``` can be either 'diffusion' or 'act'
 
-1. **Add the search path of your repository** to the extension manager:
-    - Navigate to the extension manager using `Window` -> `Extensions`.
-    - Click on the **Hamburger Icon** (☰), then go to `Settings`.
-    - In the `Extension Search Paths`, enter the absolute path to `IsaacLabExtensionTemplate/source`
-    - If not already present, in the `Extension Search Paths`, enter the path that leads to Isaac Lab's extension directory directory (`IsaacLab/source`)
-    - Click on the **Hamburger Icon** (☰), then click `Refresh`.
+### Change environment settings
+Environment configurations are located under
 
-2. **Search and enable your extension**:
-    - Find your extension under the `Third Party` category.
-    - Toggle it to enable your extension.
+```bash
+source/spinal_surgery/spinal_surgery/tasks/{task_name}/cfgs/{task_name}.yaml
+```
+For example, you choose model-based or learning-based ultrasound simulation for the ```robot_US_guidance``` task by setting
+```
+sim:
+    us: 'net'  # for learning-based, or 'conv' for model-based 
+```
+in ```source/spinal_surgery/spinal_surgery/tasks/robot_US_guidance/cfgs/robot_US_guidance.yaml```.
+
+To turn on or turn off the visualization, you can also set
+
+```
+sim:
+    vis_us: true  # or false
+```
+### Play a checkpoint
+PPO checkpoint can be played via:
+```bash
+python workflows/skrl/play.py --task {task_id} --checkpoint /path-to-checkpoint --num_envs 100
+```
+PPO + safety filter checkpoint for the ultrasound-guided-surgery environment can be played via:
+```bash
+python workflows/skrl/play_sppo.py --checkpoint /path-to-checkpoint --num_envs 100
+```
+lerobot checkpoints (for example, ACT for ```ultrasound guidance```) can be played by:
+```
+python workflows/lerobot/play_lerobot_guidance.py --policy.config=workflows/lerobot/play_guidance_act_cfg.json --policy.path=/path-to-checkpoint/pretrained_model
+```
 
 ## Docker setup
 
