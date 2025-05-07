@@ -37,6 +37,7 @@ import gymnasium as gym
 import torch
 
 import isaaclab_tasks  # noqa: F401
+import spinal_surgery
 from isaaclab_tasks.utils import parse_env_cfg
 import cProfile
 import wandb

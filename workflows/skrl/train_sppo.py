@@ -91,6 +91,7 @@ from isaaclab.utils.io import dump_pickle, dump_yaml
 from isaaclab_rl.skrl import SkrlVecEnvWrapper
 
 import isaaclab_tasks  # noqa: F401
+import spinal_surgery
 from isaaclab_tasks.utils.hydra import hydra_task_config
 from spinal_surgery.lab.agents.skrl_safety_filter_agent import SafetyFilterPPO, SPPO_DEFAULT_CONFIG
 from spinal_surgery.lab.agents.skrl_safety_filter_trainer import SafetyFilterSequentialTrainer
