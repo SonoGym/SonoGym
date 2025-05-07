@@ -48,7 +48,7 @@ class VertebraViewer:
             self.tip_line_list = []
             for i in range(self.num_envs):
                 tip_line = pv.Line(pointa=self.tip_points_a[i, :].cpu().numpy(), 
-                                   pointb=self.tip_points_b[i, :].cpu().numpy(), resolution=2)
+                                   pointb=self.tip_points_b[i, :].cpu().numpy(), resolution=1)
                 self.tip_line_list.append(tip_line)
             self.visualize()
 
@@ -123,7 +123,7 @@ class VertebraViewer:
             self.tip_line_list[i].points = np.stack([tip_points_a_np[i], 
                                                      tip_points_b_np[i]], axis=0)
             if i%self.n_human_types == index:
-                self.p.add_mesh(self.tip_line_list[i], color='green', opacity=0.5)
+                self.p.add_mesh(self.tip_line_list[i], color='green', opacity=1.0)
         # add tip representation
         cylinder_points = self.traj_points_np_list[index]
         print(cylinder_points)
@@ -145,8 +145,10 @@ class VertebraViewer:
         tip_points_b_np = tip_points_ab[:, 1, :].cpu().numpy()
         for i in range(self.num_envs):
             # TODO: change original points
-            self.tip_line_list[i].points = np.stack([tip_points_a_np[i], 
-                                                     tip_points_b_np[i]], axis=0)
+            original_points = self.tip_line_list[i].points
+            self.tip_line_list[i].points += np.stack([tip_points_a_np[i, :], 
+                                                     tip_points_b_np[i, :]], axis=0) - original_points
+            # print(self.tip_line_list[i].points)
             # TODO: add new points
             # if i % 5 == 0:
             #     tip_line = pv.Line(pointa=tip_points_a_np[i], 

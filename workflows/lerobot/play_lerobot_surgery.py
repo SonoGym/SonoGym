@@ -32,6 +32,7 @@ def main(cfg: EvalPipelineConfig):
     simulation_app = app_launcher.app
 
     import gymnasium as gym
+    import torch.nn.functional as F
 
     from isaaclab.envs import DirectMARLEnv, multi_agent_to_single_agent
     from isaaclab.utils.dict import print_dict
@@ -67,6 +68,7 @@ def main(cfg: EvalPipelineConfig):
                 "observation.state": state,
             }
         else:
+            # video = F.interpolate(image, size=(256, 256), mode='bilinear', align_corners=False) # for diffusion
             obs = {
                 "observation.images.slice_0": video[:, 0:5:2, :, :],
                 "observation.images.slice_1": video[:, 5:10:2, :, :],
@@ -80,7 +82,7 @@ def main(cfg: EvalPipelineConfig):
     env_cfg = parse_env_cfg(
         "Isaac-robot-US-guided-surgery-v0", 
         device="cuda", 
-        num_envs=100, 
+        num_envs=30, 
         use_fabric=True
     )
 
@@ -116,6 +118,8 @@ def main(cfg: EvalPipelineConfig):
         # select action
         with torch.inference_mode():
             action = policy.select_action(obs)
+
+        # print(action)
 
         # step the environment
         obs, _, _, _, _ = env.step(action)

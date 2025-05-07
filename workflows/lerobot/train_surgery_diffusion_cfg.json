@@ -1,6 +1,6 @@
 {
     "dataset": {
-        "root": "/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/Isaac-robot-US-guided-surgery-v0-256-ES10",
+        "root": "/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/Isaac-robot-US-guided-surgery-v0-single-new",
         "repo_id": "yunkao/us-surgery",
         "revision": "v2",
         "episodes": null,
@@ -19,11 +19,11 @@
 
         "vision_backbone": "resnet18",
         "crop_shape": [
-            256, 256
+            50, 37
         ],
         "crop_is_random": true,
         "pretrained_backbone_weights": null,
-        "use_group_norm": true,
+        "use_group_norm": false,
         "spatial_softmax_num_keypoints": 32,
         "use_separate_rgb_encoder_per_camera": false,
         
@@ -39,7 +39,7 @@
         "beta_start": 0.0001,
         "beta_end": 0.02,
         "prediction_type": "epsilon",
-        "clip_sample": true,
+        "clip_sample": false,
         "clip_sample_range": 1.0,
 
         "num_inference_steps": null,
@@ -56,38 +56,39 @@
         "scheduler_warmup_steps": 500,
 
         "normalization_mapping": {
-            "STATE": "MEAN_STD",
-            "ACTION": "MEAN_STD"
+            "STATE": "MIN_MAX",
+            "ACTION": "MIN_MAX",
+            "VISUAL": "MEAN_STD"
         },
         "input_features": {
             "observation.images.slice_0": {
                 "type": "VISUAL",
                 "shape": [
-                    256, 256, 3
+                    50, 37, 3
                 ]
             },
             "observation.images.slice_1": {
                 "type": "VISUAL",
                 "shape": [
-                    256, 256, 3
+                    50, 37, 3
                 ]
             },
             "observation.images.slice_2": {
                 "type": "VISUAL",
                 "shape": [
-                    256, 256, 3
+                    50, 37, 3
                 ]
             },
             "observation.images.slice_3": {
                 "type": "VISUAL",
                 "shape": [
-                    256, 256, 3
+                    50, 37, 3
                 ]
             },
             "observation.images.slice_4": {
                 "type": "VISUAL",
                 "shape": [
-                    256, 256, 3
+                    50, 37, 3
                 ]
             },
             "observation.state": {
@@ -101,18 +102,18 @@
             "action": {
                 "type": "ACTION",
                 "shape": [
-                    3
+                    6
                 ]
             }
         }
     },
     "output_dir": null,
-    "job_name": "us_guidance_diffusion",
+    "job_name": "us_surgery_diffusion_no_clip",
     "resume": false,
     "seed": 1000,
     "num_workers": 4,
     "batch_size": 8,
-    "steps": 250000,
+    "steps": 500000,
     "eval_freq": 25000,
     "log_freq": 200,
     "save_checkpoint": true,
@@ -138,7 +139,7 @@
     "wandb": {
         "enable": true,
         "disable_artifact": false,
-        "project": "lerobot-us-guidance",
+        "project": "0506-lerobot-us-surgery",
         "entity": null,
         "notes": null
     }

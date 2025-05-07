@@ -49,11 +49,11 @@ reward:
 
 
 sim:
-  episode_length: 7 # 4 10
+  episode_length: 4 # 4 10
   patient_xz_range: [[100, 70, 1.5], [180, 200, 3.5]]
   patient_xz_init_range: [[100, 70, 1.5], [180, 200, 3.5]]
   if_use_ct: True
-  us: 'conv'
+  us: 'net'
   ct_range: [-300, 3000]
   vis_us: True
   vis_int: 5
