@@ -62,6 +62,7 @@ class SurfaceReconstructor(LabelImgSlicer):
         self.real_volume_size = torch.tensor(volume_res).to(self.device) * self.volume_size
         self.target_vertebra_center = target_vertebra_center # (N, 3) center of target vertebrae
         self.target_vertebra_label = target_vertebra_label
+        self.target_vertebra_points = target_vertebra_points # (n, P, 3) points of target vertebrae
         
         # origin of the human rec volume in the human frame
         self.human_rec_volume_corner = target_vertebra_center - self.real_volume_size / 2
@@ -92,6 +93,9 @@ class SurfaceReconstructor(LabelImgSlicer):
         self.x_grid = self.x_grid.unsqueeze(0).repeat(self.num_envs, 1, 1) # (n, w, e)
         self.z_grid = self.z_grid.unsqueeze(0).repeat(self.num_envs, 1, 1) # (n, w, e)
 
+        # get upper surface
+        self.get_target_bone_upper_surface()
+
 
         self.vis_rec = visualize
         if visualize:
@@ -102,9 +106,16 @@ class SurfaceReconstructor(LabelImgSlicer):
             first_vertebra_pv = pv.PolyData(first_vertebra.cpu().numpy())
             self.p_human_rec = pv.Plotter()
             self.p_us_rec = pv.Plotter()
-            self.p_human_rec.add_mesh(first_vertebra_pv, color='red', point_size=0.5)
+            self.p_human_rec.add_mesh(first_vertebra_pv, color='blue', point_size=0.5)
             self.us_ver_actor = self.p_us_rec.add_mesh(first_vertebra_pv, color='red', point_size=0.5)
-            self.human_actor=self.p_human_rec.add_volume(self.human_rec_volume[0, :, :, :].cpu().numpy()*200, opacity=[0.01, 0.5])
+
+            # visualize_reconstructed and complete volume together
+            not_coverged = torch.logical_and(self.human_rec_volume[0, :, :, :] == 0, 
+                                             self.upper_surface_volume_list[0] == 1).cpu().numpy()
+            visualize_volume = self.human_rec_volume[0, :, :, :].cpu().numpy()*200
+            visualize_volume[not_coverged] = 100
+            self.human_actor=self.p_human_rec.add_volume(visualize_volume, opacity=[0.01, 0.5])
+
             self.us_actor=self.p_us_rec.add_volume(self.US_rec_volume[0, :, :, :].cpu().numpy()*200, opacity=[0.01, 0.5])
             self.p_human_rec.show_axes()
             self.p_us_rec.show_axes()
@@ -131,6 +142,35 @@ class SurfaceReconstructor(LabelImgSlicer):
             max=self.volume_size.reshape((1, 1, -1)).repeat(volume_to_ee_coords.shape[0], volume_to_ee_coords.shape[1], 1) - 1
         )
         return volume_to_ee_coords
+    
+    def get_target_bone_upper_surface(self):
+        '''
+        get the target bone upper surface
+        '''
+        self.upper_surface_volume_list = []
+        self.upper_surface_num_points = []
+        for i in range(self.n_human_types):
+            upper_surface_volume = torch.zeros(tuple(self.volume_size)).to(self.device)
+            human_vertebra_points = torch.tensor(self.target_vertebra_points[i]).to(self.device)  # (P, 3)
+
+            volume_vertbebra_points = human_vertebra_points * self.label_res - self.human_rec_volume_corner[i, :]  # (P, 3)
+            volume_vertbebra_points = volume_vertbebra_points / self.volume_res  # (P, 3)
+            volume_vertbebra_points = volume_vertbebra_points.to(torch.int)
+            volume_vertbebra_points = torch.clamp(
+                volume_vertbebra_points, 
+                torch.zeros_like(volume_vertbebra_points, device=self.device), 
+                max=self.volume_size.reshape((1, -1)).repeat(volume_vertbebra_points.shape[0], 1) - 1
+            )
+            volume_vertbebra_points = volume_vertbebra_points[volume_vertbebra_points[:, 1] < self.volume_size[2] // 2, :] # (P, 3)
+
+            upper_surface_volume[volume_vertbebra_points[:, 0],
+                                 volume_vertbebra_points[:, 1],
+                                 volume_vertbebra_points[:, 2]] = 1
+            self.upper_surface_volume_list.append(upper_surface_volume)
+            self.upper_surface_num_points.append(torch.sum(upper_surface_volume == 1))
+
+        self.upper_surface_num_points = torch.tensor(self.upper_surface_num_points).to(self.device) # (N,)
+
         
         
     def edge_from_label_slice(self, world_to_human_pos, world_to_human_rot, world_to_ee_pos, world_to_ee_quat):
@@ -266,8 +306,14 @@ class SurfaceReconstructor(LabelImgSlicer):
             self.p_us_rec.remove_actor(self.us_ver_actor)
             self.us_ver_actor=ver_actor
             # update human rec volume
-            human_actor=self.p_human_rec.add_volume(self.human_rec_volume[0, :, :, :].cpu().numpy()*200, opacity=[0.01, 0.5])
-            us_actor=self.p_us_rec.add_volume(self.US_rec_volume[0, :, :, :].cpu().numpy()*200, opacity=[0.01, 0.5])
+
+            not_coverged = torch.logical_and(self.human_rec_volume[0, :, :, :] == 0, 
+                                             self.upper_surface_volume_list[0] == 1).cpu().numpy()
+            visualize_volume = self.human_rec_volume[0, :, :, :].cpu().numpy()*200
+            visualize_volume[not_coverged] = 100
+            human_actor=self.p_human_rec.add_volume(visualize_volume, opacity=[0.01, 0.5])
+            # human_actor=self.p_human_rec.add_volume(self.human_rec_volume[0, :, :, :].cpu().numpy()*200, opacity=[0.01, 0.5])
+            us_actor=self.p_us_rec.add_volume(self.US_rec_volume[0, :, :, :].cpu().numpy()*200, cmap=['cyan', 'green'], opacity=[0.01, 0.5])
             self.p_human_rec.remove_actor(self.human_actor)
             self.p_us_rec.remove_actor(self.us_actor)
             self.human_actor=human_actor
@@ -276,12 +322,46 @@ class SurfaceReconstructor(LabelImgSlicer):
             self.p_us_rec.update()
 
 
+    def get_converage_ratio(self):
+        # get total number of points for surface:
+        upper_surface_per_env = self.upper_surface_num_points[self.env_to_human_inds]
+
+        return self.cur_cov / upper_surface_per_env  # (N,)
+
     def update_cmd(self, d_x_z_z_y_angle):
         # update x, z, position and y angle
         super().update_cmd(d_x_z_z_y_angle[:, 0:3])
         # update  roll_adujst
         self.roll_adj += d_x_z_z_y_angle[:, 3:4]
         self.roll_adj = torch.clamp(self.roll_adj, min=-self.max_roll_adj, max=self.max_roll_adj)
+
+    def human_cmd_state_from_ee_pose(self, human_to_target_pos, human_to_target_quat):
+        '''
+        convert ee_pose to human command'''
+        
+        rot_mat = matrix_from_quat(human_to_target_quat)
+        z_axis = rot_mat[:, :, 2]  # (num_envs, 3)
+        x_axis = rot_mat[:, :, 0]  # (num_envs, 3)
+        angle_y = torch.atan2(x_axis[:, 2], x_axis[:, 0])  # (num_envs)
+
+        pos = human_to_target_pos + z_axis * self.height
+        x_z = pos[:, [0, 2]] / self.label_res
+
+        # compute real roll adjustment
+        y_axis = rot_mat[:, :, 1]  # (num_envs, 3)
+        suface_normal = torch.zeros((self.num_envs, 3), device=self.device)
+        for i in range(self.n_human_types):
+            cur_x = x_z[i::self.n_human_types, 0]  # (num_envs / n, 3)
+            cur_z = x_z[i::self.n_human_types, 1]  # (num_envs / n, 3)
+            cur_x = torch.clamp(cur_x, min=0, max=self.label_maps[i].shape[0] - 1)
+            cur_z = torch.clamp(cur_z, min=0, max=self.label_maps[i].shape[2] - 1)
+            
+            normal = self.surface_normal_list[i][cur_x.int(), cur_z.int(), :]  # (num_envs / n, 3)
+            suface_normal[i::self.n_human_types, :] = normal
+        sin_angle = torch.sum(torch.cross(suface_normal, y_axis) * z_axis, dim=-1)  # cross product and dot
+        angle_z = torch.asin(sin_angle)  # (num_envs)
+
+        return torch.cat([x_z, angle_y.unsqueeze(-1), angle_z.unsqueeze(-1)], dim=-1)  # (num_envs, 3)
 
     def reset(self):
         volume_size = self.volume_size.int().cpu().numpy()

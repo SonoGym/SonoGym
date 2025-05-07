@@ -1,0 +1,34 @@
+# Configuration for a wandb sweep
+# Running the following command under the hood:
+
+program: scripts/reinforcement_learning/skrl/train.py
+description: "US_guidance_sac_rand_start"
+name: us_guidance_sac
+method: bayes
+metric:
+  goal: maximize
+  name: total_reward
+parameters:
+  agent.agent.actor_learning_rate:
+    values: [0.001, 0.0001]
+  agent.agent.critic_learning_rate:
+    values: [0.0001,0.001]
+  agent.agent.initial_entropy_value:
+    values: [0.1, 0.01, 0.001]
+  agent.agent.target_entropy:
+    values: [-0.1, -1, -10, -100]
+  agent.agent.gradient_steps:
+    values: [1, 2]
+  agent.agent.batch_size:
+    values: [64, 256, 1024]
+  agent.agent.rollouts:
+    values: [4096]
+
+command:
+  - /isaac-sim/python.sh
+  - ${program}
+  - "--headless"
+  - "--task=Isaac-robot-US-guidance-v0"
+  - "--algorithm=SAC"
+  - "--num_envs=2"
+  - ${args_no_hyphens}

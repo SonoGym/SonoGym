@@ -1,13 +1,16 @@
-model_path: /home/yunkao/git/IsaacLabExtensionTemplate/models/pix2pix_rand_down_up.pth
-train_data_sample_path: /home/yunkao/git/IsaacLabExtensionTemplate/models/training_samples
+model_path: models/pix2pix_rand_down_up.pth
+train_data_sample_path: models/training_samples
 
 label_res: 0.0015
 num_bins: 256
+reset_hist_interval: 10000000
+elevation_downsample: 5 # 20
 
 CT: # CT cfgs to convert current HU CT inputs to network inputs
   range: [0, 150] # [0, 150] [-2000, 3100] intensity range
   res: 0.0015 # m
   size: [256, 256] # pixel size
+
 
 model:
   input_noise: False

@@ -6,7 +6,7 @@ seed: 42
 models:
   separate: True
   policy:  # see gaussian_model parameters
-    class: GaussianMixin # CategoricalMixin # 
+    class: DeterministicMixin # CategoricalMixin # 
     clip_actions: False
     clip_log_std: True
     min_log_std: -20.0
@@ -199,7 +199,7 @@ agent:
   discount_factor: 0.99       # discount factor (gamma)
   polyak: 0.005               # soft update hyperparameter (tau)
 
-  actor_learning_rate: 0.001   # actor learning rate
+  actor_learning_rate: 0.0001   # actor learning rate
   critic_learning_rate: 0.001  # critic learning rate
 
   random_timesteps: 0        # random exploration steps
@@ -229,7 +229,7 @@ agent:
 
   experiment:
     directory:  'surgery_tip_frame'          # experiment's parent directory
-    experiment_name: 'TD3'
+    experiment_name: 'TD3_lr_1e-4'
 
 
 # Sequential trainer

@@ -18,6 +18,7 @@ import time
 import numpy as np
 from collections.abc import Sequence
 import gymnasium as gym
+import wandb
 
 ##
 # Pre-defined configs
@@ -34,6 +35,7 @@ from spinal_surgery.lab.kinematics.gt_motion_generator import GTMotionGenerator,
 
 import cProfile
 from gymnasium.spaces import Dict
+import os
 
 scene_cfg = YAML().load(open(f"{PACKAGE_DIR}/tasks/robot_US_reconstruction/cfgs/robotic_US_reconstruction.yaml", 'r'))
 
@@ -68,21 +70,21 @@ INIT_STATE_BED = AssetBaseCfg.InitialStateCfg(
     rot=(0.5, 0.5, 0.5, 0.5)
 )
 scale_bed = bed_cfg['scale']
-# use stl: Totalsegmentator_dataset_v2_subset_body_contact
+# use stl: selected_dataset_body_contact
 human_usd_list = [
-            f"{ASSETS_DATA_DIR}/HumanModels/Totalsegmentator_dataset_v2_subset_body_from_urdf/" + p_id for p_id in patient_cfg['id_list']
+            f"{ASSETS_DATA_DIR}/HumanModels/selected_dataset_body_from_urdf/" + p_id for p_id in patient_cfg['id_list']
 ]
 human_stl_list = [
-            f"{ASSETS_DATA_DIR}/HumanModels/Totalsegmentator_dataset_v2_subset_stl/" + p_id for p_id in patient_cfg['id_list']
+            f"{ASSETS_DATA_DIR}/HumanModels/selected_dataset_stl/" + p_id for p_id in patient_cfg['id_list']
 ]
 human_raw_list = [
-            f"{ASSETS_DATA_DIR}/HumanModels/Totalsegmentator_dataset_v2_subset/" + p_id for p_id in patient_cfg['id_list']
+            f"{ASSETS_DATA_DIR}/HumanModels/selected_dataset/" + p_id for p_id in patient_cfg['id_list']
 ]
 
 target_anatomy = scene_cfg['reconstruction']['target_vertebra']
-target_stl_file_list = [f"{ASSETS_DATA_DIR}/HumanModels/Totalsegmentator_dataset_v2_subset_stl/" + p_id + '/' + str(target_anatomy) + '.stl' 
+target_stl_file_list = [f"{ASSETS_DATA_DIR}/HumanModels/selected_dataset_stl/" + p_id + '/' + str(target_anatomy) + '.stl' 
                         for p_id in patient_cfg['id_list']]
-target_traj_file_list = [f"{ASSETS_DATA_DIR}/HumanModels/Totalsegmentator_dataset_v2_subset_stl/" +
+target_traj_file_list = [f"{ASSETS_DATA_DIR}/HumanModels/selected_dataset_stl/" +
                           p_id + '/' + 'standard_right_traj_' + str(target_anatomy)[-2:] + '.stl' for p_id in patient_cfg['id_list']]
 
 usd_file_list = [human_file + "/combined_wrapwrap/combined_wrapwrap.usd" for human_file in human_usd_list]
@@ -115,7 +117,7 @@ class roboticUSRecEnvCfg(DirectRLEnvCfg):
     )
 
     # scene
-    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=100, env_spacing=4.0, replicate_physics=False)
+    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=100, env_spacing=2.0, replicate_physics=False)
 
 
 class roboticUSRecEnv(DirectRLEnv):
@@ -341,7 +343,16 @@ class roboticUSRecEnv(DirectRLEnv):
 
         total_l = self.rew_cfg['action_length']['w_pos'] * pos_l + self.rew_cfg['action_length']['w_angle'] * rot_l
 
-        return total_l
+        return total_l, pos_l, rot_l
+    
+    def get_traj_length(self, last_cmd_pose: torch.Tensor, cur_cmd_pose: torch.Tensor):
+        # compute position and rotation
+        pos_l = torch.linalg.norm(cur_cmd_pose[:, 0:2] - last_cmd_pose[:, 0:2], dim=-1)
+        rot_l = torch.linalg.norm(cur_cmd_pose[:, 2:] - last_cmd_pose[:, 2:], dim=-1)
+
+        total_l = self.rew_cfg['action_length']['w_pos'] * pos_l + self.rew_cfg['action_length']['w_angle'] * rot_l
+
+        return total_l, pos_l, rot_l
 
 
     def _get_observations(self) -> dict:
@@ -431,17 +442,35 @@ class roboticUSRecEnv(DirectRLEnv):
     def _get_rewards(self) -> torch.Tensor:
         reward = 0
         # length of path
-        self.act_l = self.get_action_length(self.actions)
+        self.act_l, self.pos_l, self.rot_l = self.get_action_length(self.actions)
+        cmd_state = self.surface_reconstructor.human_cmd_state_from_ee_pose(
+            self.human_to_ee_pos, self.human_to_ee_quat
+        )
+        self.total_l, self.pos_l, self.rot_l = self.get_traj_length(
+            self.cmd_state, cmd_state
+        )
 
+        
         # current coverage
         reward += self.rew_cfg['incremental_cov'] * self.surface_reconstructor.incremental_cov
-        reward -= self.act_l
+        reward -= self.total_l
 
         self.total_length += self.act_l
+        self.total_pos_l += self.pos_l
+        self.total_rot_l += self.rot_l
         self.total_reward += reward
+        self.cov_ratio = self.surface_reconstructor.get_converage_ratio()
+        self.cmd_state = cmd_state
         # print(self.total_reward)
         # print(self.surface_reconstructor.cur_cov)
         # print(self.total_length)
+        # record infor
+        self.extras["human_to_ee_pos"] = self.human_to_ee_pos
+        self.extras["human_to_ee_quat"] = self.human_to_ee_quat
+        self.extras["cur_cmd_state"] = self.cmd_state
+
+        if scene_cfg['if_record_traj']:
+            self.cmd_pose_trajs.append(self.cmd_state)
 
         return reward 
     
@@ -555,11 +584,37 @@ class roboticUSRecEnv(DirectRLEnv):
         self.human_to_ee_pos, self.human_to_ee_quat = subtract_frame_transforms(
             self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
         )
+        self.cmd_state = self.surface_reconstructor.human_cmd_state_from_ee_pose(
+            self.human_to_ee_pos, self.human_to_ee_quat
+        )
+        if hasattr(self, 'total_reward'):
+            wandb.log({'total_reward': self.total_reward.mean().item()})
+            wandb.log({'total_length': self.total_length.mean().item()})
+            wandb.log({'cov_ratio': self.cov_ratio.mean().item()})
+            wandb.log({'total_pos_l': self.total_pos_l.mean().item()})
+            wandb.log({'total_rot_l': self.total_rot_l.mean().item()})
         self.total_reward = torch.zeros(self.scene.num_envs, device=self.sim.device)
         self.total_length = torch.zeros(self.scene.num_envs, device=self.sim.device)
+        self.total_rot_l = torch.zeros(self.scene.num_envs, device=self.sim.device)
+        self.total_pos_l = torch.zeros(self.scene.num_envs, device=self.sim.device)
 
         # reset the surface reconstructor
         self.surface_reconstructor.reset()
+
+        # record infor
+        self.extras["human_to_ee_pos"] = self.human_to_ee_pos
+        self.extras["human_to_ee_quat"] = self.human_to_ee_quat
+        self.extras["cur_cmd_state"] = self.cmd_state
+
+        if scene_cfg['if_record_traj']:
+            record_path = PACKAGE_DIR + scene_cfg['record_path']
+            if hasattr(self, 'cmd_pose_trajs'):
+                if not os.path.exists(record_path):
+                    os.makedirs(record_path)
+                self.cmd_pose_trajs = torch.stack(self.cmd_pose_trajs, dim=1)
+                torch.save(self.cmd_pose_trajs, record_path + 'cmd_pose_trajs.pt')
+                torch.save(self.vertebra_viewer.human_to_ver_per_envs, record_path + 'human_to_ver.pt')
+            self.cmd_pose_trajs = [self.cmd_state]
 
     def check_nan(self):
         if torch.isnan(self.US_ee_pos_b).any() or torch.isnan(self.US_ee_quat_b).any():

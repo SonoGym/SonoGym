@@ -61,8 +61,13 @@ class LabelImgSlicer(SurfaceMotionPlanner):
 
         # smoothing
         self.kernel = self.gaussian_kernel()
-        
 
+        self.env_to_human_inds = torch.arange(self.num_envs, device=self.device) % self.n_human_types
+        self.label_img_shapes = [label_map.shape for label_map in label_maps]
+        self.label_img_shapes = torch.tensor(self.label_img_shapes, device=self.device)
+        self.coords_upper_bound = self.label_img_shapes[self.env_to_human_inds, :] - 1 # (N, 3)
+        self.coords_upper_bound = self.coords_upper_bound.reshape((-1, 1, 3))
+            
         return
     
     def get_human_img_coords(self, img_coords, world_to_human_pos, world_to_human_quat, world_to_ee_pos, world_to_ee_quat):
@@ -80,7 +85,7 @@ class LabelImgSlicer(SurfaceMotionPlanner):
         human_img_coords = torch.clamp(
             human_img_coords, 
             torch.zeros_like(human_img_coords, device=self.device), 
-            max=torch.tensor(self.label_maps[0].shape, device=self.device).repeat(human_img_coords.shape[0], human_img_coords.shape[1], 1) - 1
+            max=self.coords_upper_bound
         )
         return human_img_coords
 
@@ -167,26 +172,37 @@ class LabelImgSlicer(SurfaceMotionPlanner):
         return smoothed_seg
     
     
-    def visualize(self, key, first_n=20):
+    def visualize(self, key, first_n=10):
         '''
         visualize label image by combine'''
         first_n = min(first_n, self.num_envs)
 
-        if key=='seg' or key=='US':
+        if key=='seg':  #or key=='US':
 
             combined_img = self.label_img_tensor[:first_n, :, :, 0].reshape((first_n * self.img_size[0], self.img_size[1])) # (w * first_n, h)
 
             combined_img_np = combined_img.cpu().numpy()
 
-            cv2.imshow("Label Image Update", combined_img_np.T / np.max(combined_img_np))
-            cv2.waitKey(1)
-        if key=='CT' or key=='US':
+            # cv2.imshow("Label Image Update", (combined_img_np.T / np.max(combined_img_np)*255).astype(np.uint8))            
+            # cv2.waitKey(0)
+            # cv2.destroyAllWindows()
+            plt.figure(1, figsize=(first_n*2, 3))
+            plt.clf()
+            plt.imshow((combined_img_np.T / np.max(combined_img_np)*255).astype(np.uint8),cmap='gray')
+            plt.pause(0.0001)
+
+        if key=='CT':
 
             combined_ct = self.ct_img_tensor[:first_n, :, :, 0].reshape((first_n * self.img_size[0], self.img_size[1])) # (w * first_n, h)
 
             combined_ct_np = combined_ct.cpu().numpy()
 
-            cv2.imshow("Ct Image Update", combined_ct_np.T / np.max(combined_ct_np))
-            cv2.waitKey(1)
+            # cv2.imshow("Ct Image Update", (combined_ct_np.T / np.max(combined_ct_np)*255).astype(np.uint8))
+            # cv2.waitKey(0)
+            # cv2.destroyAllWindows()
+            plt.figure(2, figsize=(first_n*2, 3))
+            plt.clf()
+            plt.imshow((combined_ct_np.T / np.max(combined_ct_np)*255).astype(np.uint8), cmap='gray')
+            plt.pause(0.0001)
 
         return

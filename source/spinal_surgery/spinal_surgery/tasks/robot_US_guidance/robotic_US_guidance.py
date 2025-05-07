@@ -33,9 +33,15 @@ from spinal_surgery.lab.sensors.ultrasound.US_slicer import USSlicer
 from ruamel.yaml import YAML
 from spinal_surgery import PACKAGE_DIR
 from spinal_surgery.lab.kinematics.gt_motion_generator import GTMotionGenerator, GTDiscreteMotionGenerator
+from spinal_surgery.lab.kinematics.vertebra_viewer import VertebraViewer
 import cProfile
+import wandb
+import os
 
 scene_cfg = YAML().load(open(f"{PACKAGE_DIR}/tasks/robot_US_guidance/cfgs/robotic_US_guidance.yaml", 'r'))
+# TODO: fix observation scale
+if scene_cfg['sim']['us'] == 'net':
+    scene_cfg['observation']['scale'] = scene_cfg['observation']['scale_net']
 
 # robot
 robot_cfg = scene_cfg['robot']
@@ -68,16 +74,22 @@ INIT_STATE_BED = AssetBaseCfg.InitialStateCfg(
     rot=(0.5, 0.5, 0.5, 0.5)
 )
 scale_bed = bed_cfg['scale']
-# use stl: Totalsegmentator_dataset_v2_subset_body_contact
+# use stl: selected_dataset_body_contact
 human_usd_list = [
-            f"{ASSETS_DATA_DIR}/HumanModels/Totalsegmentator_dataset_v2_subset_body_from_urdf/" + p_id for p_id in patient_cfg['id_list']
+            f"{ASSETS_DATA_DIR}/HumanModels/selected_dataset_body_from_urdf/" + p_id for p_id in patient_cfg['id_list']
 ]
 human_stl_list = [
-            f"{ASSETS_DATA_DIR}/HumanModels/Totalsegmentator_dataset_v2_subset_stl/" + p_id for p_id in patient_cfg['id_list']
+            f"{ASSETS_DATA_DIR}/HumanModels/selected_dataset_stl/" + p_id for p_id in patient_cfg['id_list']
 ]
 human_raw_list = [
-            f"{ASSETS_DATA_DIR}/HumanModels/Totalsegmentator_dataset_v2_subset/" + p_id for p_id in patient_cfg['id_list']
+            f"{ASSETS_DATA_DIR}/HumanModels/selected_dataset/" + p_id for p_id in patient_cfg['id_list']
 ]
+
+target_anatomy = patient_cfg['target_anatomy']
+target_stl_file_list = [f"{ASSETS_DATA_DIR}/HumanModels/selected_dataset_stl/" + p_id + '/' + str(target_anatomy) + '.stl' 
+                        for p_id in patient_cfg['id_list']]
+target_traj_file_list = [f"{ASSETS_DATA_DIR}/HumanModels/selected_dataset_stl/" +
+                          p_id + '/' + 'standard_right_traj_' + str(target_anatomy)[-2:] + '.stl' for p_id in patient_cfg['id_list']]
 
 usd_file_list = [human_file + "/combined_wrapwrap/combined_wrapwrap.usd" for human_file in human_usd_list]
 label_map_file_list = [human_file + "/combined_label_map.nii.gz" for human_file in human_stl_list]
@@ -123,7 +135,7 @@ class roboticUSEnv(DirectRLEnv):
         self.US_ee_jacobi_idx = self.robot_entity_cfg.body_ids[-1]
 
         # define ik controllers
-        ik_params = {"lambda_val": 0.01}
+        ik_params = {"lambda_val": 0.1}
         pose_diff_ik_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls", ik_params=ik_params)
         self.pose_diff_ik_controller = DifferentialIKController(pose_diff_ik_cfg, self.scene.num_envs, device=self.sim.device)
 
@@ -181,6 +193,7 @@ class roboticUSEnv(DirectRLEnv):
         motion_plan_cfg = scene_cfg['motion_planning']
         self.max_action = torch.tensor(scene_cfg['action']['max_action'], device=self.sim.device).reshape((1, -1))
         self.goal_cmd_pose = torch.tensor(motion_plan_cfg['patient_xz_goal'], device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
+        self.use_vertebra_goal = motion_plan_cfg['use_vertebra_goal']
         self.gt_motion_generator = GTDiscreteMotionGenerator(
             goal_cmd_pose=self.goal_cmd_pose,
             scale=torch.tensor(motion_plan_cfg['scale'], device=self.sim.device),
@@ -189,6 +202,16 @@ class roboticUSEnv(DirectRLEnv):
             surface_normal_list=self.US_slicer.surface_normal_list,
             label_res=label_res,
             US_height=self.US_slicer.height,
+        )
+
+        self.vertebra_viewer = VertebraViewer(
+            self.scene.num_envs,
+            len(human_usd_list),
+            target_stl_file_list,
+            target_traj_file_list,
+            self.sim_cfg['vis_us'],
+            label_res,
+            self.sim.device
         )
         
         # change observation space to image 
@@ -215,6 +238,30 @@ class roboticUSEnv(DirectRLEnv):
                                          device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
         self.w_act = scene_cfg['reward']['w_action']
 
+        self.single_action_space = gym.spaces.Box(
+            low=-(self.max_action[0, :] / self.action_scale[0, :]).cpu().numpy(),
+            high=(self.max_action[0, :] / self.action_scale[0, :]).cpu().numpy(),
+            shape=(self.cfg.action_space,),
+            dtype=np.float32,
+        )
+
+        wandb.init()
+        self.num_step = 0
+
+    
+    def get_US_target_pose(self):
+        # compute position change
+        vertebra_to_US_2d_pos = torch.tensor(scene_cfg['motion_planning']['vertebra_to_US_2d_pos']).to(self.sim.device)
+        
+        vertebra_2d_pos = self.vertebra_viewer.human_to_ver_per_envs[:, [0, 2]]
+        US_target_2d_pos = vertebra_2d_pos + vertebra_to_US_2d_pos.unsqueeze(0)
+
+        US_target_2d_angle = self.goal_cmd_pose[:, 2:3] * torch.ones_like(vertebra_2d_pos[:, 0:1])
+
+        US_target_2d = torch.cat([US_target_2d_pos, US_target_2d_angle], dim=-1)
+
+        self.goal_cmd_pose = US_target_2d
+
 
     def _setup_scene(self):
         """Configuration for a cart-pole scene."""
@@ -231,11 +278,14 @@ class roboticUSEnv(DirectRLEnv):
         # kuka US
         self.robot = Articulation(self.cfg.robot_cfg)
 
-        # medical bad
+        if scene_cfg['sim']['vis_us']:
+            usd_folder = "usd_colored"
+        else:
+            usd_folder = "usd_no_contact"
         medical_bed_cfg = RigidObjectCfg(
             prim_path="/World/envs/env_.*/Bed", 
             spawn=sim_utils.UsdFileCfg(
-                usd_path=f"{ASSETS_DATA_DIR}/MedicalBed/usd_no_contact/hospital_bed.usd",
+                usd_path=f"{ASSETS_DATA_DIR}/MedicalBed/" + usd_folder + "/hospital_bed.usd",
                 scale = (scale_bed, scale_bed, scale_bed),
                 rigid_props=sim_utils.RigidBodyPropertiesCfg(
                     disable_gravity=False,
@@ -295,7 +345,7 @@ class roboticUSEnv(DirectRLEnv):
         self.world_to_human_pos, self.world_to_human_rot = self.human_world_poses[:, 0:3], self.human_world_poses[:, 3:7]
         # get ee pose w
         self.US_ee_pose_w = self.robot.data.body_state_w[:, self.robot_entity_cfg.body_ids[-1], 0:7]
-
+        self.num_step += 1
         
         if self.observation_mode == "US":
             self.US_slicer.slice_US(self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7])
@@ -312,12 +362,11 @@ class roboticUSEnv(DirectRLEnv):
         else:
             raise ValueError("Invalid observation mode")
 
-        if self.sim_cfg['vis_us']:
+        if self.sim_cfg['vis_us'] and self.num_step % self.sim_cfg['vis_int'] == 0:
             self.US_slicer.visualize(self.observation_mode)
 
         return observations
 
-        
     def _pre_physics_step(self, actions: torch.Tensor) -> None:
         # if action is 6 dim (SE), convert to 3 dim (xz pos + y rot)
         if actions.shape[-1] == 6:
@@ -356,6 +405,9 @@ class roboticUSEnv(DirectRLEnv):
         # set new command
         self.pose_diff_ik_controller.set_command(base_to_ee_target_pose)
 
+        # record extras
+        self.extras["human_to_ee_pos"] = human_to_ee_pos
+        self.extras["human_to_ee_quat"] = human_to_ee_quat
 
     def _apply_action(self):
         world_to_base_pose = self.robot.data.root_link_state_w[:, 0:7]
@@ -379,16 +431,16 @@ class roboticUSEnv(DirectRLEnv):
     def _get_rewards(self) -> torch.Tensor:
         # get current cmd pose
         cur_human_ee_pos, cur_human_ee_quat = subtract_frame_transforms(
-            self.world_to_human_pos, self.world_to_human_rot, 
+            self.world_to_human_pos, self.world_to_human_rot,
             self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
         )
-        cur_cmd_pose = self.gt_motion_generator.human_cmd_state_from_ee_pose(cur_human_ee_pos, cur_human_ee_quat)
+        self.cur_cmd_pose = self.gt_motion_generator.human_cmd_state_from_ee_pose(cur_human_ee_pos, cur_human_ee_quat)
         # gt_cmd, gt_cmd_pose = self.gt_motion_generator.generate_gt_human_cmd(cur_cmd_pose)
         # print(cur_cmd_pose)
 
         # add reward for getting closer to the target
-        cur_distance_to_goal = torch.norm(cur_cmd_pose[:, 0:2] - self.goal_cmd_pose[:, 0:2], dim=-1) * 0.03
-        cur_distance_to_goal += torch.norm(cur_cmd_pose[:, 2:3] - self.goal_cmd_pose[:, 2:3], dim=-1)
+        cur_distance_to_goal = torch.norm(self.cur_cmd_pose[:, 0:2] - self.goal_cmd_pose[:, 0:2], dim=-1) * 0.03
+        cur_distance_to_goal += torch.norm(self.cur_cmd_pose[:, 2:3] - self.goal_cmd_pose[:, 2:3], dim=-1)
 
         reward = self.distance_to_goal - cur_distance_to_goal
 
@@ -400,6 +452,13 @@ class roboticUSEnv(DirectRLEnv):
         self.total_reward += reward
         # print(self.total_reward)
 
+        # record current cmd pose
+        self.extras["cur_cmd_pose"] = self.cur_cmd_pose
+        # record current goal pose
+        self.extras["goal_cmd_pose"] = self.goal_cmd_pose
+        if scene_cfg['if_record_traj']:
+            self.cmd_pose_trajs.append(self.cur_cmd_pose)
+
         return reward 
     
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
@@ -407,7 +466,7 @@ class roboticUSEnv(DirectRLEnv):
             time_out = self.episode_length_buf >= self.max_episode_length - 1
         else:
             time_out = torch.zeros_like(self.episode_length_buf)
-        out_of_bounds = torch.zeros_like(self.US_slicer.no_collide) # self.US_slicer.no_collide
+        out_of_bounds = torch.zeros_like(self.US_slicer.no_collide)  # self.US_slicer.no_collide
        
         return out_of_bounds, time_out
     
@@ -421,7 +480,7 @@ class roboticUSEnv(DirectRLEnv):
             # set actions into buffers
 
             # get human frame
-            self.human_world_poses = self.human.data.body_link_state_w[:, 0, 0:7] # these are already the initial poses
+            self.human_world_poses = self.human.data.body_link_state_w[:, 0, 0:7]  # these are already the initial poses
             # define world to human poses
             self.world_to_human_pos, self.world_to_human_rot = self.human_world_poses[:, 0:3], self.human_world_poses[:, 3:7]
             world_ee_target_pos, world_ee_target_quat = combine_frame_transforms(
@@ -467,8 +526,6 @@ class roboticUSEnv(DirectRLEnv):
             # update buffers at sim dt
             self.scene.update(dt=self.physics_dt)
 
-
-
     def _reset_idx(self, env_ids: Sequence[int] | None):
         if env_ids is None:
             env_ids = self.robot._ALL_INDICES
@@ -513,7 +570,18 @@ class roboticUSEnv(DirectRLEnv):
         # set joint positions
         self._move_towards_target(self.US_slicer.human_to_ee_target_pos, self.US_slicer.human_to_ee_target_quat)
 
+        if hasattr(self, 'total_reward'):
+            wandb.log({'total_reward': self.total_reward.mean().item()})
+            wandb.log({'distance_to_goal': self.distance_to_goal.mean().item()})
+            wandb.log({'pos err': (torch.norm(self.cur_cmd_pose[:, 0:2] - self.goal_cmd_pose[:, 0:2], dim=-1)
+                                   * self.US_slicer.label_res).mean().item()})
+            wandb.log({'rot err': (torch.norm(self.cur_cmd_pose[:, 2:3] - self.goal_cmd_pose[:, 2:3], dim=-1)
+                                   * 180 / torch.pi).mean().item()})
+            
         # init distance to goal
+        if self.use_vertebra_goal:
+            self.get_US_target_pose()
+
         cur_human_ee_pos, cur_human_ee_quat = subtract_frame_transforms(
             self.world_to_human_pos, self.world_to_human_rot, 
             self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
@@ -524,6 +592,23 @@ class roboticUSEnv(DirectRLEnv):
 
         self.total_reward = torch.zeros(self.scene.num_envs, device=self.sim.device)
 
+        # record infor
+        self.extras["human_to_ee_pos"] = cur_human_ee_pos
+        self.extras["human_to_ee_quat"] = cur_human_ee_quat
+        self.extras["cur_cmd_pose"] = self.cur_cmd_pose
+        self.extras["goal_cmd_pose"] = self.goal_cmd_pose
+
+        # record trajectory
+        # tensor: (N, T, 3)
+        if scene_cfg['if_record_traj']:
+            record_path = PACKAGE_DIR + scene_cfg['record_path']
+            if hasattr(self, 'cmd_pose_trajs'):
+                if not os.path.exists(record_path):
+                    os.makedirs(record_path)
+                self.cmd_pose_trajs = torch.stack(self.cmd_pose_trajs, dim=1)
+                torch.save(self.cmd_pose_trajs, record_path + 'cmd_pose_trajs.pt')
+                torch.save(self.goal_cmd_pose, record_path + 'goal_cmd_pose.pt')
+            self.cmd_pose_trajs = [self.cur_cmd_pose]
 
 
 

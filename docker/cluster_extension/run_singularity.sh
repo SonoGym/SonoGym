@@ -69,6 +69,7 @@ singularity exec \
     -B $TMPDIR/$dir_name:/workspace/isaaclab:rw \
     -B $TMPDIR/$dir_name/extension/IsaacLabExtensionTemplate:/workspace/isaaclab_extension_template:rw \
     -B $CLUSTER_DATA_PATH:/workspace/isaaclab_extension_template/source/spinal_surgery/spinal_surgery/assets/data:rw \
+    -B $CLUSTER_GENERATIVE_PATH:/workspace/isaaclab_extension_template/models:rw \
     -B $CLUSTER_ISAACLAB_DIR/logs:/workspace/isaaclab/logs:rw \
     --nv --writable --containall $TMPDIR/$2.sif \
     bash -c "export ISAACLAB_PATH=/workspace/isaaclab && cd /workspace/isaaclab && /isaac-sim/python.sh ${CLUSTER_PYTHON_EXECUTABLE} ${@:3}"

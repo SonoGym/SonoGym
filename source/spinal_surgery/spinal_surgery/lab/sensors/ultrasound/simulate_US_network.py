@@ -4,10 +4,12 @@ from monai.networks.nets.unet import UNet
 import os
 from PIL import Image
 import torchvision.transforms as transforms
+from spinal_surgery import PACKAGE_DIR, PROJECT_DIR
 
 class USSimulatorNetwork:
     def __init__(self, us_model_cfg, device):
         self.device = device
+        model_path = os.path.join(PROJECT_DIR, us_model_cfg['model_path'])
 
         self.model = UNet(
             spatial_dims=us_model_cfg['model']['spatial_dims'],
@@ -20,7 +22,7 @@ class USSimulatorNetwork:
             act=('leakyrelu', {"negative_slope": 0.2})
         ).to(self.device)
         # get model
-        self.model.load_state_dict(torch.load(us_model_cfg['model_path']))
+        self.model.load_state_dict(torch.load(model_path))
         self.model.eval()
 
         # get CT cfg
@@ -34,6 +36,10 @@ class USSimulatorNetwork:
 
         self.construct_train_data_histogram()
 
+        # change the hist every k steps
+        self.k = us_model_cfg['reset_hist_interval']
+        self.step = 0
+
 
     def simulate_US_image(self, ct_img_tensor):
         '''
@@ -43,7 +49,7 @@ class USSimulatorNetwork:
         with torch.no_grad():
 
             # intensity scale: [-1, 1]
-            print('ct', torch.min(ct_img_tensor), torch.max(ct_img_tensor))
+            # print('ct', torch.min(ct_img_tensor), torch.max(ct_img_tensor))
             ct = torch.clamp(ct_img_tensor, self.CT_cfg["range"][0], self.CT_cfg["range"][1])
             ct = (ct - self.CT_cfg["range"][0]) / (self.CT_cfg["range"][1] - self.CT_cfg["range"][0]) # * 2 - 1
 
@@ -118,7 +124,7 @@ class USSimulatorNetwork:
 
 
     def construct_train_data_histogram(self):
-        source_path = self.cfg['train_data_sample_path']
+        source_path = os.path.join(PROJECT_DIR, self.cfg['train_data_sample_path'])
         self.num_bins = self.cfg['num_bins']
         device = self.device
         self.read_img_folder(source_path)
@@ -146,24 +152,29 @@ class USSimulatorNetwork:
         Vectorized histogram matching using PyTorch, fully differentiable and GPU-friendly.
         Assumes source and test are 2D torch tensors.
         """
-        
-        test_flat = test.flatten()
 
         # Normalize to [0, 1]
-        ref_min, ref_max = test_flat.min(), test_flat.max()
+        
 
-        test_norm = (test_flat - ref_min) / (ref_max - ref_min + 1e-8)
+        if self.step % self.k == 0:
+            self.test_min, self.test_max = test.min(), test.max()
 
-        test_hist = torch.histc(test_norm, bins=self.num_bins, min=0.0, max=1.0)
-        test_cdf = torch.cumsum(test_hist, dim=0)
-        test_cdf /= test_cdf.clone()[-1]
+        test_norm = (test - self.test_min) / (self.test_max - self.test_min + 1e-8)
+
+        test_norm = test_norm.flatten()
+
+        if self.step % self.k == 0:
+            # Update histogram
+            test_hist = torch.histc(test_norm, bins=self.num_bins, min=0.0, max=1.0)
+            self.test_cdf = torch.cumsum(test_hist, dim=0)
+            self.test_cdf /= self.test_cdf.clone()[-1]
 
          # Digitize source
         test_bins = torch.bucketize(test_norm, self.bin_edges[:-1], right=False)
         test_bins = torch.clamp(test_bins, 1, self.num_bins) - 1
 
         # Map: for each source bin, find the closest ref bin with >= cdf
-        mapping_indices = torch.searchsorted(self.source_cdf, test_cdf)
+        mapping_indices = torch.searchsorted(self.source_cdf, self.test_cdf)
         mapping_indices = torch.clamp(mapping_indices, 0, self.num_bins - 1)
 
         # Build LUT: source bin center → matched value
@@ -171,5 +182,7 @@ class USSimulatorNetwork:
 
         matched_norm = lut[test_bins]
         matched = matched_norm * (self.src_max - self.src_min) + self.src_min
+
+        self.step += 1
 
         return matched.reshape_as(test)

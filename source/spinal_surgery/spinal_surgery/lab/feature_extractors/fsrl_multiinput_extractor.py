@@ -18,14 +18,13 @@ class MultiInputNN(nn.Module):
         )
         
         # Fully connected layer for image features
-        self.fc_image = None
+        self.fc_image = nn.Linear(1536, 512)
         
         # FNN for pos
         self.fc_pos = nn.Sequential(
             nn.Linear(3, 256),
             nn.ReLU(),
             nn.Linear(256, 256),
-            nn.ReLU()
         )
         
         # FNN for quat
@@ -33,7 +32,6 @@ class MultiInputNN(nn.Module):
             nn.Linear(4, 256),
             nn.ReLU(),
             nn.Linear(256, 256),
-            nn.ReLU()
         )
         
         # Final FNN after concatenation
@@ -60,11 +58,9 @@ class MultiInputNN(nn.Module):
         # Process image
         img_features = self.cnn(image)
         img_features = torch.flatten(img_features, start_dim=1)
-        if self.fc_image is None:
-            self.fc_image = nn.Sequential(
-                nn.Linear(img_features.shape[1], 512),  # lazy initialization
-                nn.ReLU()
-            ).to(img_features.device)
+        # if self.fc_image is None:
+        #     self.fc_image = nn.Linear(img_features.shape[1], 512).to(img_features.device)
+        #     print('img_feature_shape', img_features.shape[1])
         img_features = self.fc_image(img_features)
         
         # Process pos and quat
@@ -80,10 +76,6 @@ class MultiInputNN(nn.Module):
         
         return output, state
     
-    
-    
-import torch
-from torch import nn
 
 class MultiInputActionNN(nn.Module):
     def __init__(self, action_dim, output_dim):

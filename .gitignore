@@ -41,3 +41,5 @@ source/spinal_surgery/spinal_surgery/assets/data/*
 
 # models
 models/*
+lerobot-dataset/*
+source/spinal_surgery/spinal_surgery/recordings/*

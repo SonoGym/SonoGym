@@ -139,6 +139,9 @@ def train(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, age
     # set seed and computing
     # args = TrainCfg()
     args = load_config_from_yaml(agent_cfg, TrainCfg)
+
+    # set num_envs same as episode_per_collect
+    args_cli.num_envs = agent_cfg['episode_per_collect']
     
     seed_all(args.seed)
     torch.set_num_threads(args.thread)

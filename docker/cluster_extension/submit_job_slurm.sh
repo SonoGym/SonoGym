@@ -9,11 +9,11 @@ module load eth_proxy
 cat <<EOT > job.sh
 #!/bin/bash
 
-#SBATCH -n 1
-#SBATCH --cpus-per-task=8
-#SBATCH --gpus=rtx_3090:1
+#SBATCH --gres=gpumem:20g
+#SBATCH --gpus-per-node=1
+#SBATCH --ntasks=1
 #SBATCH --time=23:00:00
-#SBATCH --mem-per-cpu=4048
+#SBATCH --mem-per-cpu=10000
 #SBATCH --mail-type=END
 #SBATCH --mail-user=None
 #SBATCH --job-name="training-$(date +"%Y-%m-%dT%H:%M")"

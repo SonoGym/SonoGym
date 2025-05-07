@@ -21,14 +21,15 @@ def generate_urdf(stl_path, urdf_path, link_name="base_link", color=(0.7, 0.7, 0
 
     urdf_content = f"""<?xml version="1.0"?>
 <robot name="{link_name}_robot">
+    <material name="custom_color">
+        <color rgba="{r} {g} {b} {a}"/>
+    </material>
     <link name="{link_name}">
         <visual>
             <geometry>
                 <mesh filename="{stl_filename}" scale="1 1 1"/>
             </geometry>
-            <material name="custom_color">
-                <color rgba="{r} {g} {b} {a}"/>
-            </material>
+            <material name="custom_color"/>
         </visual>
         <collision>
             <geometry>
@@ -81,9 +82,13 @@ def process_patients(root_dir, output_root, color=(0.7, 0.7, 0.7, 1.0)):
             print(f"❌ No STL file found for patient: {patient}")
 
 # Example usage
-input_root = "/home/yunkao/git/IsaacLabExtensionTemplate/exts/spinal_surgery/spinal_surgery/assets/data/HumanModels/Totalsegmentator_dataset_v2_subset_stl"  # Replace with actual path
-output_root = "/home/yunkao/git/IsaacLabExtensionTemplate/exts/spinal_surgery/spinal_surgery/assets/data/HumanModels/Totalsegmentator_dataset_v2_subset_stl"  # Replace with actual path
+input_root = "/home/yunkao/git/IsaacLabExtensionTemplate/source/spinal_surgery/spinal_surgery/assets/data/HumanModels/selected_dataset_stl"  # Replace with actual path
+output_root = "/home/yunkao/git/IsaacLabExtensionTemplate/source/spinal_surgery/spinal_surgery/assets/data/HumanModels/selected_dataset_stl"  # Replace with actual path
 
-custom_color = (0.7, 0.5, 0.2, 0.7)  # Example: Red color with full opacity
+custom_color = (130 / 255, 94 / 255, 92 / 255, 1.0)  # Example: Red color with full opacity
 
-process_patients(input_root, output_root, color=custom_color)
+# process_patients(input_root, output_root, color=custom_color)
+
+stl_path_bed = '/home/yunkao/git/IsaacLabExtensionTemplate/source/spinal_surgery/spinal_surgery/assets/data/MedicalBed/stl/hospital_bed.stl'
+urdf_path_bed = '/home/yunkao/git/IsaacLabExtensionTemplate/source/spinal_surgery/spinal_surgery/assets/data/MedicalBed/stl/hospital_bed.urdf'
+generate_urdf(stl_path_bed, urdf_path_bed, color=(186 / 255, 228 / 255, 229 / 255, 1.0))

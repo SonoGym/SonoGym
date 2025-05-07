@@ -1,0 +1,27 @@
+# Configuration for a wandb sweep
+# Running the following command under the hood:
+
+program: scripts/reinforcement_learning/skrl/train.py
+description: "surgery_sac_sweep_lr"
+name: surgery_sac_sweep_lr
+method: bayes
+metric:
+  goal: maximize
+  name: total_reward
+parameters:
+  agent.agent.actor_learning_rate:
+    values: [0.001, 0.00001, 0.0001]
+  agent.agent.critic_learning_rate:
+    values: [0.00001, 0.0001, 0.001]
+  agent.agent.entropy_learning_rate:
+    values: [0.001, 0.0001, 0.00001]
+  agent.agent.gradient_steps:
+    values: [1, 8, 32]
+
+command:
+  - /isaac-sim/python.sh
+  - ${program}
+  - "--headless"
+  - "--task=Isaac-robot-US-guided-surgery-v0"
+  - "--algorithm=SAC"
+  - ${args_no_hyphens}

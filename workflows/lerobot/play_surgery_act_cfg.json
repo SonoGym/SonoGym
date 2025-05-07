@@ -1,0 +1,81 @@
+{
+    "type": "act",
+        "device": "cuda",
+        "use_amp": false,
+
+        "n_obs_steps": 1,
+        "n_action_steps": 100,
+        "chunk_size": 100,
+
+        "vision_backbone": "resnet18",
+        "pretrained_backbone_weights": null,
+        "replace_final_stride_with_dilation": false,
+        "pre_norm": false,
+
+        "dim_model": 512,
+        "n_heads": 8,
+        "dim_feedforward": 3200,
+        "feedforward_activation": "relu",
+        "n_encoder_layers": 4,
+        "n_decoder_layers": 1,
+        "use_vae": true,
+        "latent_dim": 32,
+        "n_vae_encoder_layers": 4,
+        "temporal_ensemble_coeff": null,
+        "dropout": 0.1,
+        "kl_weight": 10.0,
+        "optimizer_lr": 1e-05,
+        "optimizer_weight_decay": 0.0001,
+        "optimizer_lr_backbone": 1e-05,
+
+        "normalization_mapping": {
+            "STATE": "MEAN_STD",
+            "ACTION": "MEAN_STD"
+        },
+        "input_features": {
+            "observation.images.slice_0": {
+                "type": "VISUAL",
+                "shape": [
+                    50, 37, 3
+                ]
+            },
+            "observation.images.slice_1": {
+                "type": "VISUAL",
+                "shape": [
+                    50, 37, 3
+                ]
+            },
+            "observation.images.slice_2": {
+                "type": "VISUAL",
+                "shape": [
+                    50, 37, 3
+                ]
+            },
+            "observation.images.slice_3": {
+                "type": "VISUAL",
+                "shape": [
+                    50, 37, 3
+                ]
+            },
+            "observation.images.slice_4": {
+                "type": "VISUAL",
+                "shape": [
+                    50, 37, 3
+                ]
+            },
+            "observation.state": {
+                "type": "STATE",
+                "shape": [
+                    7
+                ]
+            }
+        },
+        "output_features": {
+            "action": {
+                "type": "ACTION",
+                "shape": [
+                    6
+                ]
+            }
+        }
+}

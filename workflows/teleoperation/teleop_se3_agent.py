@@ -16,9 +16,9 @@ parser = argparse.ArgumentParser(description="Keyboard teleoperation for Isaac L
 parser.add_argument(
     "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
 )
-parser.add_argument("--num_envs", type=int, default=10, help="Number of environments to simulate.")
+parser.add_argument("--num_envs", type=int, default=64, help="Number of environments to simulate.")
 parser.add_argument("--teleop_device", type=str, default="keyboard", help="Device for interacting with environment")
-parser.add_argument("--task", type=str, default='Isaac-robot-US-guidance-v0', help="Name of the task.")
+parser.add_argument("--task", type=str, default='Isaac-robot-US-guided-surgery-v0', help="Name of the task.")
 parser.add_argument("--sensitivity", type=float, default=5.0, help="Sensitivity factor.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -35,8 +35,6 @@ simulation_app = app_launcher.app
 import gymnasium as gym
 import torch
 
-import omni.log
-
 from isaaclab.devices import Se3Gamepad, Se3Keyboard, Se3SpaceMouse
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 
@@ -45,6 +43,7 @@ from isaaclab_tasks.manager_based.manipulation.lift import mdp
 from isaaclab_tasks.utils import parse_env_cfg
 import spinal_surgery
 import cProfile
+import wandb
 
 def pre_process_actions(delta_pose: torch.Tensor, gripper_command: bool) -> torch.Tensor:
     """Pre-process actions for the environment."""
@@ -75,6 +74,9 @@ def main():
         env_cfg.commands.object_pose.resampling_time_range = (1.0e9, 1.0e9)
         # add termination condition for reaching the goal otherwise the environment won't reset
         env_cfg.terminations.object_reached_goal = DoneTerm(func=mdp.object_reached_goal)
+
+    # init wandb
+    wandb.init(project=args_cli.task, config=env_cfg)
     # create environment
     env = gym.make(args_cli.task, cfg=env_cfg)
     # check environment name (for reach , we don't allow the gripper)
@@ -131,10 +133,10 @@ def main():
 
 if __name__ == "__main__":
     # run the main function
-    profiler = cProfile.Profile()
-    profiler.enable()
+    # profiler = cProfile.Profile()
+    # profiler.enable()
     main()
-    profiler.disable()
-    profiler.dump_stats("main_stats.prof")
+    # profiler.disable()
+    # profiler.dump_stats("main_stats.prof")
     # close sim app
     simulation_app.close()

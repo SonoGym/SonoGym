@@ -48,7 +48,7 @@ class VertebraViewer:
             self.tip_line_list = []
             for i in range(self.num_envs):
                 tip_line = pv.Line(pointa=self.tip_points_a[i, :].cpu().numpy(), 
-                                   pointb=self.tip_points_b[i, :].cpu().numpy())
+                                   pointb=self.tip_points_b[i, :].cpu().numpy(), resolution=1)
                 self.tip_line_list.append(tip_line)
             self.visualize()
 
@@ -123,13 +123,16 @@ class VertebraViewer:
             self.tip_line_list[i].points = np.stack([tip_points_a_np[i], 
                                                      tip_points_b_np[i]], axis=0)
             if i%self.n_human_types == index:
-                self.p.add_mesh(self.tip_line_list[i], color='blue')
+                self.p.add_mesh(self.tip_line_list[i], color='green', opacity=1.0)
         # add tip representation
-
-        self.p.add_mesh(self.vertebra_points_np_list[index], color='red', point_size=0.5)
-        self.p.add_mesh(self.traj_points_np_list[index], color='green', point_size=0.5)
-        self.p.add_mesh(pv.Sphere(center=self.human_to_traj_pos[index].cpu().numpy() / self.res, 
-                                  radius=self.traj_radius[index].item()/self.res), color='green', opacity=0.5)
+        cylinder_points = self.traj_points_np_list[index]
+        print(cylinder_points)
+        print(self.human_to_traj_pos[index])
+        goal_points = cylinder_points[cylinder_points[:, 1] > self.human_to_traj_pos[index, 1].item() / self.res]
+        self.p.add_mesh(self.vertebra_points_np_list[index], color='cornflowerblue', point_size=0.5)
+        self.p.add_mesh(goal_points, color='darkred', point_size=2.0)
+        # self.p.add_mesh(pv.Sphere(center=self.human_to_traj_pos[index].cpu().numpy() / self.res, 
+        #                           radius=self.traj_radius[index].item()/self.res), color='green', opacity=0.5)
 
         self.p.show(interactive_update=True)
         self.p.show_axes()
@@ -141,8 +144,18 @@ class VertebraViewer:
         tip_points_a_np = tip_points_ab[:, 0, :].cpu().numpy()
         tip_points_b_np = tip_points_ab[:, 1, :].cpu().numpy()
         for i in range(self.num_envs):
-            self.tip_line_list[i].points = np.stack([tip_points_a_np[i], 
-                                                     tip_points_b_np[i]], axis=0)
+            # TODO: change original points
+            original_points = self.tip_line_list[i].points
+            self.tip_line_list[i].points += np.stack([tip_points_a_np[i, :], 
+                                                     tip_points_b_np[i, :]], axis=0) - original_points
+            # print(self.tip_line_list[i].points)
+            # TODO: add new points
+            # if i % 5 == 0:
+            #     tip_line = pv.Line(pointa=tip_points_a_np[i], 
+            #                        pointb=tip_points_b_np[i], 
+            #                        resolution=1)
+            #     self.p.add_mesh(tip_line, color='green', opacity=0.2)
+            
         self.p.update()
         
 
