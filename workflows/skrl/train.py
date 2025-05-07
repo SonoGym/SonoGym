@@ -23,10 +23,13 @@ parser.add_argument("--video", action="store_true", default=False, help="Record 
 parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
 parser.add_argument("--video_interval", type=int, default=2000, help="Interval between video recordings (in steps).")
 parser.add_argument("--num_envs", type=int, default=64, help="Number of environments to simulate.")
-parser.add_argument("--task", type=str, default='Isaac-robot-US-reconstruction-v0', help="Name of the task.")
+parser.add_argument("--task", type=str, default='Isaac-robot-US-guidance-v0', help="Name of the task.")
 parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
 parser.add_argument(
     "--distributed", action="store_true", default=False, help="Run training with multiple GPUs or nodes."
+)
+parser.add_argument(
+    "--rnn", action="store_true", default=False, help="train rnn agent"
 )
 parser.add_argument("--checkpoint", type=str, default=None, help="Path to model checkpoint to resume training.")
 parser.add_argument("--max_iterations", type=int, default=None, help="RL Policy training iterations.")
@@ -81,6 +84,7 @@ if version.parse(skrl.__version__) < version.parse(SKRL_VERSION):
 
 if args_cli.ml_framework.startswith("torch"):
     from skrl.utils.runner.torch import Runner
+    from spinal_surgery.lab.agents.skrl_rnn_runner import RNNRunner
 elif args_cli.ml_framework.startswith("jax"):
     from skrl.utils.runner.jax import Runner
 
@@ -186,7 +190,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # configure and instantiate the skrl runner
     # https://skrl.readthedocs.io/en/latest/api/utils/runner.html
-    runner = Runner(env, agent_cfg)
+    if args_cli.rnn:
+        # use RNNRunner if the agent is RNN
+        runner = RNNRunner(env, agent_cfg)
+    else:
+        runner = Runner(env, agent_cfg)
 
     # load checkpoint (if specified)
     if resume_path:
