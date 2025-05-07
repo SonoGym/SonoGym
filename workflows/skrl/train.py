@@ -100,6 +100,7 @@ from isaaclab_rl.skrl import SkrlVecEnvWrapper
 import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils.hydra import hydra_task_config
 import wandb
+import spinal_surgery
 
 # PLACEHOLDER: Extension template (do not remove this comment)
 
