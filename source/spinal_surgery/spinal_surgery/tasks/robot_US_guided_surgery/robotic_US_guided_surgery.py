@@ -25,6 +25,7 @@ import copy
 # Pre-defined configs
 ##
 from spinal_surgery.assets.kuka_US import *
+from spinal_surgery.assets.fr3_US import *
 from spinal_surgery.assets.kuka_drill import *
 from isaaclab.utils.math import subtract_frame_transforms, combine_frame_transforms, matrix_from_quat, quat_from_matrix
 from isaaclab.utils.math import quat_from_euler_xyz, quat_mul, apply_delta_pose
@@ -48,20 +49,39 @@ if scene_cfg['sim']['us'] == 'net':
     scene_cfg['observation']['scale'] = scene_cfg['observation']['scale_net']
 us_cfg = YAML().load(open(f"{PACKAGE_DIR}/lab/sensors/cfgs/us_cfg.yaml", 'r'))
 us_generative_cfg = YAML().load(open(f"{PACKAGE_DIR}/lab/sensors/cfgs/us_generative_cfg.yaml", 'r'))
-# robot
 robot_cfg = scene_cfg['robot']
-INIT_STATE_ROBOT_US = ArticulationCfg.InitialStateCfg(
-    joint_pos={
-        "lbr_joint_0": robot_cfg['joint_pos'][0],
-        "lbr_joint_1": robot_cfg['joint_pos'][1],
-        "lbr_joint_2": robot_cfg['joint_pos'][2],
-        "lbr_joint_3": robot_cfg['joint_pos'][3], # -1.2,
-        "lbr_joint_4": robot_cfg['joint_pos'][4],
-        "lbr_joint_5": robot_cfg['joint_pos'][5], # 1.5,
-        "lbr_joint_6": robot_cfg['joint_pos'][6],
-    },
-    pos = (float(robot_cfg['pos'][0]), float(robot_cfg['pos'][1]), float(robot_cfg['pos'][2])) # ((0.0, -0.75, 0.4))
-)
+
+# robot
+if scene_cfg['robot']['type'] == 'kuka':
+    robot_articulation_cfg = KUKA_HIGH_PD_CFG
+    INIT_STATE_ROBOT_US = ArticulationCfg.InitialStateCfg(
+        joint_pos={
+            "lbr_joint_0": robot_cfg['joint_pos'][0],
+            "lbr_joint_1": robot_cfg['joint_pos'][1],
+            "lbr_joint_2": robot_cfg['joint_pos'][2],
+            "lbr_joint_3": robot_cfg['joint_pos'][3],  # -1.2,
+            "lbr_joint_4": robot_cfg['joint_pos'][4],
+            "lbr_joint_5": robot_cfg['joint_pos'][5],  # 1.5,
+            "lbr_joint_6": robot_cfg['joint_pos'][6],
+        },
+        pos = (float(robot_cfg['pos'][0]), float(robot_cfg['pos'][1]), float(robot_cfg['pos'][2])) # ((0.0, -0.75, 0.4))
+    )
+
+elif scene_cfg['robot']['type'] == 'fr3':
+    robot_articulation_cfg = FR3_HIGH_PD_US_CFG
+    INIT_STATE_ROBOT_US = ArticulationCfg.InitialStateCfg(
+        joint_pos={
+            "fr3_joint1": robot_cfg['joint_pos'][0],
+            "fr3_joint2": robot_cfg['joint_pos'][1],
+            "fr3_joint3": robot_cfg['joint_pos'][2],
+            "fr3_joint4": robot_cfg['joint_pos'][3],  # -1.2,
+            "fr3_joint5": robot_cfg['joint_pos'][4],
+            "fr3_joint6": robot_cfg['joint_pos'][5],  # 1.5,
+            "fr3_joint7": robot_cfg['joint_pos'][6],
+        },
+        pos = (float(robot_cfg['pos'][0]), float(robot_cfg['pos'][1]), float(robot_cfg['pos'][2])) # ((0.0, -0.75, 0.4))
+    )
+
 robot_drill_cfg = scene_cfg['robot_drill']
 INIT_STATE_ROBOT_DRILL = ArticulationCfg.InitialStateCfg(
     joint_pos={
@@ -136,7 +156,7 @@ class roboticUSGuidedSurgeryCfg(DirectRLEnvCfg):
     # simulation
     sim: sim_utils.SimulationCfg = sim_utils.SimulationCfg(dt=1 / 120, render_interval=decimation)
 
-    robot_cfg: ArticulationCfg = KUKA_HIGH_PD_CFG.replace(
+    robot_cfg: ArticulationCfg = robot_articulation_cfg.replace(
         prim_path="/World/envs/env_.*/Robot_US",
         init_state=INIT_STATE_ROBOT_US
     )
@@ -156,7 +176,10 @@ class roboticUSGuidedSurgeryEnv(DirectRLEnv):
     def __init__(self, cfg: roboticUSGuidedSurgeryCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
-        self.robot_entity_cfg = SceneEntityCfg("robot_US", joint_names=["lbr_joint_.*"], body_names=["lbr_link_ee"])
+        if scene_cfg['robot']['type'] == 'kuka':
+            self.robot_entity_cfg = SceneEntityCfg("robot_US", joint_names=["lbr_joint_.*"], body_names=["lbr_link_ee"])
+        else:
+            self.robot_entity_cfg = SceneEntityCfg("robot_US", joint_names=["fr3_joint.*"], body_names=["fr3_link8"])
         self.robot_entity_cfg.resolve(self.scene)
         self.US_ee_jacobi_idx = self.robot_entity_cfg.body_ids[-1]
 
