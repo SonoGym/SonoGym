@@ -58,7 +58,7 @@ def main(cfg: EvalPipelineConfig):
     env_cfg = parse_env_cfg(
         "Isaac-robot-US-guidance-v0", 
         device="cuda", 
-        num_envs=100, 
+        num_envs=10, 
         use_fabric=True
     )
 

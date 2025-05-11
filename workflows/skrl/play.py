@@ -64,6 +64,7 @@ import gymnasium as gym
 import os
 import time
 import torch
+import cProfile
 
 import skrl
 from packaging import version
@@ -210,7 +211,10 @@ def main():
 
 
 if __name__ == "__main__":
-    # run the main function
+    profiler = cProfile.Profile()
+    profiler.enable()
     main()
+    profiler.disable()
+    profiler.dump_stats("main_stats.prof")
     # close sim app
     simulation_app.close()

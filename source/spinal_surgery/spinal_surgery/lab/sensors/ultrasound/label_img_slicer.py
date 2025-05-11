@@ -177,7 +177,7 @@ class LabelImgSlicer(SurfaceMotionPlanner):
         visualize label image by combine'''
         first_n = min(first_n, self.num_envs)
 
-        if key=='seg':  #or key=='US':
+        if key=='seg':
 
             combined_img = self.label_img_tensor[:first_n, :, :, 0].reshape((first_n * self.img_size[0], self.img_size[1])) # (w * first_n, h)
 

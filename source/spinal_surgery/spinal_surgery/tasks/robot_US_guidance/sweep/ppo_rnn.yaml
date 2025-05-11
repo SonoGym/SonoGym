@@ -9,8 +9,12 @@ metric:
   goal: maximize
   name: total_reward
 parameters:
-  agent.seed:
-    values: [1, 2, 3, 4, 5]
+  agent.rollouts: 
+    values: [64, 32, 16]
+  agent.mini_batches: 
+    values: [128, 32, 4]
+  agent.learning_epochs: 
+    values: [1, 3, 5]
 
 command:
   - /isaac-sim/python.sh

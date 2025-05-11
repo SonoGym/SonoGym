@@ -16,9 +16,9 @@ parser = argparse.ArgumentParser(description="Keyboard teleoperation for Isaac L
 parser.add_argument(
     "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
 )
-parser.add_argument("--num_envs", type=int, default=64, help="Number of environments to simulate.")
+parser.add_argument("--num_envs", type=int, default=10, help="Number of environments to simulate.")
 parser.add_argument("--teleop_device", type=str, default="keyboard", help="Device for interacting with environment")
-parser.add_argument("--task", type=str, default='Isaac-robot-US-guided-surgery-v0', help="Name of the task.")
+parser.add_argument("--task", type=str, default='Isaac-robot-US-guidance-v0', help="Name of the task.")
 parser.add_argument("--sensitivity", type=float, default=5.0, help="Sensitivity factor.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -44,6 +44,7 @@ from isaaclab_tasks.utils import parse_env_cfg
 import spinal_surgery
 import cProfile
 import wandb
+import time
 
 def pre_process_actions(delta_pose: torch.Tensor, gripper_command: bool) -> torch.Tensor:
     """Pre-process actions for the environment."""
@@ -116,7 +117,7 @@ def main():
     while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():
-            step +=1 
+            step += 1 
             # get keyboard command
             delta_pose, gripper_command = teleop_interface.advance()
             delta_pose = delta_pose.astype("float32")
@@ -124,6 +125,7 @@ def main():
             delta_pose = torch.tensor(delta_pose, device=env.unwrapped.device).repeat(env.unwrapped.num_envs, 1)
             # pre-process actions
             actions = pre_process_actions(delta_pose, gripper_command)
+                   
             # apply actions
             env.step(actions)
 
@@ -133,10 +135,10 @@ def main():
 
 if __name__ == "__main__":
     # run the main function
-    # profiler = cProfile.Profile()
-    # profiler.enable()
+    profiler = cProfile.Profile()
+    profiler.enable()
     main()
-    # profiler.disable()
-    # profiler.dump_stats("main_stats.prof")
+    profiler.disable()
+    profiler.dump_stats("play_stats.prof")
     # close sim app
     simulation_app.close()

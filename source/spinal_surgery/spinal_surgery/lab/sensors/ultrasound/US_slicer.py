@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
+import time
 
 class USSlicer(LabelImgSlicer):
     # Class: US slicer
@@ -240,8 +241,6 @@ class USSlicer(LabelImgSlicer):
                 ct_img_tensor = ct_img_tensor.reshape((-1, self.img_size[0], self.img_size[1]))
             self.us_net_img_tensor = self.us_sim_net.simulate_US_image(ct_img_tensor.unsqueeze(1)).permute((0, 1, 3, 2))  # (n*e, 1, W, H)
             self.us_net_img_tensor = self.us_net_img_tensor.reshape((self.num_envs, -1, self.img_size[1], self.img_size[0])).permute(0, 2, 3, 1)
-        
-        
 
 
     def visualize(self, key, first_n=10):

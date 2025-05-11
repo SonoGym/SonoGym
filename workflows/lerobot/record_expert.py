@@ -19,7 +19,7 @@ parser.add_argument(
 parser.add_argument("--num_envs", type=int, default=64, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default='Isaac-robot-US-guided-surgery-v0', help="Name of the task.")
 parser.add_argument("--num_traj", type=int, default=2048, help="Number of environments to simulate.")
-parser.add_argument("--if_record", type=bool, default=False, help="if record data to lerobot")
+parser.add_argument("--if_record", type=bool, default=True, help="if record data to lerobot")
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -142,12 +142,24 @@ def main():
                         )
                         video = stacked_frame_list[i]['observation.ultrasound'][ep, ...]  # (25, 50, 37)
                         if video.shape[0] == 25:
+                            video = (video * 768).astype(np.uint8) # only for diffusion
+                            # print(np.max(video), np.min(video))
+                            # frame = {
+                            #         "observation.images.slice_0": cv2.resize(video[0:5:2, :, :].transpose(1, 2, 0), (256, 256)),
+                            #         "observation.images.slice_1": cv2.resize(video[5:10:2, :, :].transpose(1, 2, 0), (256, 256)),
+                            #         "observation.images.slice_2": cv2.resize(video[10:15:2, :, :].transpose(1, 2, 0), (256, 256)),
+                            #         "observation.images.slice_3": cv2.resize(video[15:20:2, :, :].transpose(1, 2, 0), (256, 256)),
+                            #         "observation.images.slice_4": cv2.resize(video[20:25:2, :, :].transpose(1, 2, 0), (256, 256)),
+                            #         "observation.state": state,
+                            #         "action": stacked_frame_list[i]['action'][ep, :],
+                            #         'task': SURGERY_TASK,
+                            # }
                             frame = {
-                                    "observation.images.slice_0": cv2.resize(video[0:5:2, :, :].transpose(1, 2, 0), (256, 256)),
-                                    "observation.images.slice_1": cv2.resize(video[5:10:2, :, :].transpose(1, 2, 0), (256, 256)),
-                                    "observation.images.slice_2": cv2.resize(video[10:15:2, :, :].transpose(1, 2, 0), (256, 256)),
-                                    "observation.images.slice_3": cv2.resize(video[15:20:2, :, :].transpose(1, 2, 0), (256, 256)),
-                                    "observation.images.slice_4": cv2.resize(video[20:25:2, :, :].transpose(1, 2, 0), (256, 256)),
+                                    "observation.images.slice_0": video[0:5:2, :, :].transpose(1, 2, 0),
+                                    "observation.images.slice_1": video[5:10:2, :, :].transpose(1, 2, 0),
+                                    "observation.images.slice_2": video[10:15:2, :, :].transpose(1, 2, 0),
+                                    "observation.images.slice_3": video[15:20:2, :, :].transpose(1, 2, 0),
+                                    "observation.images.slice_4": video[20:25:2, :, :].transpose(1, 2, 0),
                                     "observation.state": state,
                                     "action": stacked_frame_list[i]['action'][ep, :],
                                     'task': SURGERY_TASK,

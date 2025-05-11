@@ -23,6 +23,7 @@ import gymnasium as gym
 # Pre-defined configs
 ##
 from spinal_surgery.assets.kuka_US import *
+from spinal_surgery.assets.fr3_US import *
 from isaaclab.utils.math import subtract_frame_transforms, combine_frame_transforms, matrix_from_quat, quat_from_matrix
 from pxr import Gf, UsdGeom
 from scipy.spatial.transform import Rotation as R
@@ -42,21 +43,38 @@ scene_cfg = YAML().load(open(f"{PACKAGE_DIR}/tasks/robot_US_guidance/cfgs/roboti
 # TODO: fix observation scale
 if scene_cfg['sim']['us'] == 'net':
     scene_cfg['observation']['scale'] = scene_cfg['observation']['scale_net']
+robot_cfg = scene_cfg['robot']
 
 # robot
-robot_cfg = scene_cfg['robot']
-INIT_STATE_ROBOT_US = ArticulationCfg.InitialStateCfg(
-    joint_pos={
-        "lbr_joint_0": robot_cfg['joint_pos'][0],
-        "lbr_joint_1": robot_cfg['joint_pos'][1],
-        "lbr_joint_2": robot_cfg['joint_pos'][2],
-        "lbr_joint_3": robot_cfg['joint_pos'][3], # -1.2,
-        "lbr_joint_4": robot_cfg['joint_pos'][4],
-        "lbr_joint_5": robot_cfg['joint_pos'][5], # 1.5,
-        "lbr_joint_6": robot_cfg['joint_pos'][6],
-    },
-    pos = (float(robot_cfg['pos'][0]), float(robot_cfg['pos'][1]), float(robot_cfg['pos'][2])) # ((0.0, -0.75, 0.4))
-)
+if scene_cfg['robot']['type'] == 'kuka':
+    robot_articulation_cfg = KUKA_HIGH_PD_CFG
+    INIT_STATE_ROBOT_US = ArticulationCfg.InitialStateCfg(
+        joint_pos={
+            "lbr_joint_0": robot_cfg['joint_pos'][0],
+            "lbr_joint_1": robot_cfg['joint_pos'][1],
+            "lbr_joint_2": robot_cfg['joint_pos'][2],
+            "lbr_joint_3": robot_cfg['joint_pos'][3],  # -1.2,
+            "lbr_joint_4": robot_cfg['joint_pos'][4],
+            "lbr_joint_5": robot_cfg['joint_pos'][5],  # 1.5,
+            "lbr_joint_6": robot_cfg['joint_pos'][6],
+        },
+        pos = (float(robot_cfg['pos'][0]), float(robot_cfg['pos'][1]), float(robot_cfg['pos'][2])) # ((0.0, -0.75, 0.4))
+    )
+
+elif scene_cfg['robot']['type'] == 'fr3':
+    robot_articulation_cfg = FR3_HIGH_PD_US_CFG
+    INIT_STATE_ROBOT_US = ArticulationCfg.InitialStateCfg(
+        joint_pos={
+            "fr3_joint1": robot_cfg['joint_pos'][0],
+            "fr3_joint2": robot_cfg['joint_pos'][1],
+            "fr3_joint3": robot_cfg['joint_pos'][2],
+            "fr3_joint4": robot_cfg['joint_pos'][3],  # -1.2,
+            "fr3_joint5": robot_cfg['joint_pos'][4],
+            "fr3_joint6": robot_cfg['joint_pos'][5],  # 1.5,
+            "fr3_joint7": robot_cfg['joint_pos'][6],
+        },
+        pos = (float(robot_cfg['pos'][0]), float(robot_cfg['pos'][1]), float(robot_cfg['pos'][2])) # ((0.0, -0.75, 0.4))
+    )
 
 # patient
 patient_cfg = scene_cfg['patient']
@@ -99,8 +117,6 @@ label_res = patient_cfg['label_res']
 scale = 1/label_res
     
 
-
-
 @configclass
 class roboticUSEnvCfg(DirectRLEnvCfg):
     # env
@@ -115,7 +131,7 @@ class roboticUSEnvCfg(DirectRLEnvCfg):
     # simulation
     sim: sim_utils.SimulationCfg = sim_utils.SimulationCfg(dt=1 / 120, render_interval=decimation)
 
-    robot_cfg: ArticulationCfg = KUKA_HIGH_PD_CFG.replace(
+    robot_cfg: ArticulationCfg = robot_articulation_cfg.replace(
         prim_path="/World/envs/env_.*/Robot_US",
         init_state=INIT_STATE_ROBOT_US
     )
@@ -130,7 +146,10 @@ class roboticUSEnv(DirectRLEnv):
     def __init__(self, cfg: roboticUSEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
-        self.robot_entity_cfg = SceneEntityCfg("robot_US", joint_names=["lbr_joint_.*"], body_names=["lbr_link_ee"])
+        if scene_cfg['robot']['type'] == 'kuka':
+            self.robot_entity_cfg = SceneEntityCfg("robot_US", joint_names=["lbr_joint_.*"], body_names=["lbr_link_ee"])
+        else:
+            self.robot_entity_cfg = SceneEntityCfg("robot_US", joint_names=["fr3_joint.*"], body_names=["fr3_link8"])
         self.robot_entity_cfg.resolve(self.scene)
         self.US_ee_jacobi_idx = self.robot_entity_cfg.body_ids[-1]
 
@@ -209,7 +228,7 @@ class roboticUSEnv(DirectRLEnv):
             len(human_usd_list),
             target_stl_file_list,
             target_traj_file_list,
-            self.sim_cfg['vis_us'],
+            False,
             label_res,
             self.sim.device
         )
@@ -236,7 +255,8 @@ class roboticUSEnv(DirectRLEnv):
         self.action_mode = scene_cfg['action']['mode']
         self.action_scale = torch.tensor(scene_cfg['action']['scale'], 
                                          device=self.sim.device).reshape((1, -1)).repeat(self.scene.num_envs, 1)
-        self.w_act = scene_cfg['reward']['w_action']
+
+        self.w_pos = scene_cfg['reward']['w_pos']
 
         self.single_action_space = gym.spaces.Box(
             low=-(self.max_action[0, :] / self.action_scale[0, :]).cpu().numpy(),
@@ -347,6 +367,8 @@ class roboticUSEnv(DirectRLEnv):
         self.US_ee_pose_w = self.robot.data.body_state_w[:, self.robot_entity_cfg.body_ids[-1], 0:7]
         self.num_step += 1
         
+        # torch.cuda.synchronize()  # Ensure previous work is done
+        # start = time.time()
         if self.observation_mode == "US":
             self.US_slicer.slice_US(self.world_to_human_pos, self.world_to_human_rot, self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7])
             US_img = self.US_slicer.us_img_tensor.permute(0, 3, 1, 2) * self.cfg.observation_scale
@@ -361,6 +383,9 @@ class roboticUSEnv(DirectRLEnv):
             observations = {"policy": label_img}
         else:
             raise ValueError("Invalid observation mode")
+        # torch.cuda.synchronize()  # Wait for GPU work to finish
+        # end = time.time()
+        # print(end - start)
 
         if self.sim_cfg['vis_us'] and self.num_step % self.sim_cfg['vis_int'] == 0:
             self.US_slicer.visualize(self.observation_mode)
@@ -439,15 +464,13 @@ class roboticUSEnv(DirectRLEnv):
         # print(cur_cmd_pose)
 
         # add reward for getting closer to the target
-        cur_distance_to_goal = torch.norm(self.cur_cmd_pose[:, 0:2] - self.goal_cmd_pose[:, 0:2], dim=-1) * 0.03
+        cur_distance_to_goal = torch.norm(self.cur_cmd_pose[:, 0:2] - self.goal_cmd_pose[:, 0:2], dim=-1) * self.w_pos
         cur_distance_to_goal += torch.norm(self.cur_cmd_pose[:, 2:3] - self.goal_cmd_pose[:, 2:3], dim=-1)
 
         reward = self.distance_to_goal - cur_distance_to_goal
 
         self.distance_to_goal = cur_distance_to_goal
 
-        # reward -= self.w_act * torch.norm(self.actions, dim=-1) # faster to reach the goal
-        # reward -= self.w_act * cur_distance_to_goal
 
         self.total_reward += reward
         # print(self.total_reward)
@@ -587,7 +610,7 @@ class roboticUSEnv(DirectRLEnv):
             self.US_ee_pose_w[:, 0:3], self.US_ee_pose_w[:, 3:7]
         )
         self.cur_cmd_pose = self.gt_motion_generator.human_cmd_state_from_ee_pose(cur_human_ee_pos, cur_human_ee_quat)
-        self.distance_to_goal = torch.norm(self.cur_cmd_pose[:, 0:2] - self.goal_cmd_pose[:, 0:2], dim=-1) * 0.03
+        self.distance_to_goal = torch.norm(self.cur_cmd_pose[:, 0:2] - self.goal_cmd_pose[:, 0:2], dim=-1) * self.w_pos
         self.distance_to_goal += torch.norm(self.cur_cmd_pose[:, 2:3] - self.goal_cmd_pose[:, 2:3], dim=-1)
 
         self.total_reward = torch.zeros(self.scene.num_envs, device=self.sim.device)

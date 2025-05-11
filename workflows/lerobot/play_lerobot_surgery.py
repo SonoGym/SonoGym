@@ -69,6 +69,7 @@ def main(cfg: EvalPipelineConfig):
             }
         else:
             # video = F.interpolate(image, size=(256, 256), mode='bilinear', align_corners=False) # for diffusion
+            video = video  # for diffusion
             obs = {
                 "observation.images.slice_0": video[:, 0:5:2, :, :],
                 "observation.images.slice_1": video[:, 5:10:2, :, :],
@@ -82,7 +83,7 @@ def main(cfg: EvalPipelineConfig):
     env_cfg = parse_env_cfg(
         "Isaac-robot-US-guided-surgery-v0", 
         device="cuda", 
-        num_envs=30, 
+        num_envs=100, 
         use_fabric=True
     )
 
