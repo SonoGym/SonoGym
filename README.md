@@ -1,18 +1,15 @@
-# UltraLab: High Performance Simulation for Robotic Ultrasound and Ultrasound-Guided Spinal Surgery
+# SonoGym: High Performance Simulation for Robotic Ultrasound and Ultrasound-Guided Spinal Surgery
 
 [![IsaacSim](https://img.shields.io/badge/IsaacSim-4.5.0-silver.svg)](https://docs.omniverse.nvidia.com/isaacsim/latest/overview.html)
 [![Isaac Lab](https://img.shields.io/badge/IsaacLab-2.1.0-silver)](https://isaac-sim.github.io/IsaacLab)
 [![Python](https://img.shields.io/badge/python-3.10-blue.svg)](https://docs.python.org/3/whatsnew/3.10.html)
-[![Linux platform](https://img.shields.io/badge/platform-linux--64-orange.svg)](https://releases.ubuntu.com/20.04/)
-[![Windows platform](https://img.shields.io/badge/platform-windows--64-orange.svg)](https://www.microsoft.com/en-us/)
-[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://pre-commit.com/)
 [![License](https://img.shields.io/badge/license-MIT-yellow.svg)](https://opensource.org/license/mit)
 
 ## Overview
 
-![overview image](overview.png)
+![overview image](sonogym.png)
 
-UltraLab provide model-based and learning-based ultrasound (US) simulation based on 3D label map and CT scans from real patient datasets.
+SonoGym provide model-based and learning-based ultrasound (US) simulation based on 3D label map and CT scans from real patient datasets.
 Our tasks include US navigation, bone surface reconstruction, and US-guided robotic surgery. 
 Our platform enables benchmarking of various algorithms, including reinforcement learning (RL), safe RL, and imitation learning.
 %
@@ -47,9 +44,9 @@ The folder contains 3 groups of large files:
 
 Put the downloaded directories in the following path respectively:
 ```
-UltraLab_assets_models/assets -> isaaclab_ultrasound_surgery/source/spinal_surgery/spinal_surgery/assets
-UltraLab_assets_models/models -> isaaclab_ultrasound_surgery/models
-UltraLab_assets_models/lerobot-dataset -> isaaclab_ultrasound_surgery/lerobot-dataset
+SonoGym_assets_models/assets -> isaaclab_ultrasound_surgery/source/spinal_surgery/spinal_surgery/assets
+SonoGym_assets_models/models -> isaaclab_ultrasound_surgery/models
+SonoGym_assets_models/lerobot-dataset -> isaaclab_ultrasound_surgery/lerobot-dataset
 ```
 
 ## Training and testing
