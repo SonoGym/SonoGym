@@ -10,9 +10,9 @@
 ![overview image](sonogym.png)
 
 SonoGym is a scalable training platform for challenging (orthopedic) surgical tasks with robotic ultrasound, built on NVIDIA IsaacLab (https://github.com/isaac-sim/IsaacLab). We provide model-based and learning-based ultrasound (US) simulation based on 3D label map and CT scans from real patient datasets.
-Our tasks include US navigation, bone surface reconstruction, and US-guided robotic surgery. 
+Our tasks include path planning for US navigation, bone surface reconstruction, and US-guided robotic surgery. 
 Our platform enables benchmarking of various algorithms, including reinforcement learning (RL), safe RL, and imitation learning.
-%
+
 
 ## Installation
 ### Install codes
@@ -36,6 +36,8 @@ python -m pip install -e source/spinal_surgery
 ```
 
 ### Download the dataset and models
+
+Download the dataset from https://huggingface.co/datasets/yunkao/expert_datasets_models_SonoGym
 
 The folder contains 3 groups of large files:
 - assets: simulation assets including medical imaging, human models, and robot.
