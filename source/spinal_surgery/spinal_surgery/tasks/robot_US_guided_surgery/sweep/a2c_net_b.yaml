@@ -1,0 +1,22 @@
+# Configuration for a wandb sweep
+# Running the following command under the hood:
+
+program: scripts/reinforcement_learning/skrl/train.py
+description: "US_guided-surgery_a2c_benchmark"
+name: US_guided-surgery_a2c_benchmark
+method: bayes
+metric:
+  goal: maximize
+  name: total_reward
+parameters:
+  agent.seed:
+    values: [1, 2, 3, 4, 5]
+
+command:
+  - /isaac-sim/python.sh
+  - ${program}
+  - "--headless"
+  - "--task=Isaac-robot-US-guided-surgery-v0"
+  - "--algorithm=A2C"
+  - "--num_envs=64"
+  - ${args_no_hyphens}

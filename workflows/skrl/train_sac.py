@@ -37,13 +37,6 @@ parser.add_argument(
     choices=["torch", "jax", "jax-numpy"],
     help="The ML framework used for training the skrl agent.",
 )
-parser.add_argument(
-    "--algorithm",
-    type=str,
-    default="PPO",
-    choices=["AMP", "PPO", "IPPO", "MAPPO", 'SAC', "TD3", "DQN", "A2C", "CEM"],
-    help="The RL algorithm used for training the skrl agent.",
-)
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -81,7 +74,6 @@ if version.parse(skrl.__version__) < version.parse(SKRL_VERSION):
 
 if args_cli.ml_framework.startswith("torch"):
     from skrl.utils.runner.torch import Runner
-    from spinal_surgery.lab.agents.skrl_rnn_runner import RNNRunner
 elif args_cli.ml_framework.startswith("jax"):
     from skrl.utils.runner.jax import Runner
 
@@ -99,15 +91,30 @@ from isaaclab.utils.io import dump_pickle, dump_yaml
 from isaaclab_rl.skrl import SkrlVecEnvWrapper
 
 import isaaclab_tasks  # noqa: F401
-from isaaclab_tasks.utils.hydra import hydra_task_config
-import wandb
 import spinal_surgery
+from isaaclab_tasks.utils.hydra import hydra_task_config
+from skrl.agents.torch.sac import SAC, SAC_DEFAULT_CONFIG
+from spinal_surgery.lab.agents.skrl_actor_critic import SharedModelSAC
+import wandb
+from skrl.trainers.torch import SequentialTrainer
+from skrl.memories.torch import RandomMemory
+from skrl.resources.schedulers.torch.kl_adaptive import KLAdaptiveLR
+from skrl.resources.preprocessors.torch.running_standard_scaler import RunningStandardScaler
+from spinal_surgery.tasks.robot_US_guided_surgery.robotic_US_guided_surgery import scene_cfg
 
 # PLACEHOLDER: Extension template (do not remove this comment)
 
 # config shortcuts
-algorithm = args_cli.algorithm.lower()
-agent_cfg_entry_point = "skrl_cfg_entry_point" if algorithm in ["ppo"] else f"skrl_{algorithm}_cfg_entry_point"
+agent_cfg_entry_point = "skrl_sac_cfg_entry_point"
+
+
+def update_config(default_cfg, new_cfg):
+    for k, v in new_cfg.items():
+        if isinstance(v, dict) and isinstance(default_cfg.get(k), dict):
+            update_config(default_cfg[k], v)
+        else:
+            default_cfg[k] = v
+    return default_cfg
 
 
 @hydra_task_config(args_cli.task, agent_cfg_entry_point)
@@ -123,10 +130,6 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # max iterations for training
     if args_cli.max_iterations:
         agent_cfg["trainer"]["timesteps"] = args_cli.max_iterations * agent_cfg["agent"]["rollouts"]
-    agent_cfg["trainer"]["close_environment_at_exit"] = False
-    # configure the ML framework into the global skrl variable
-    if args_cli.ml_framework.startswith("jax"):
-        skrl.config.jax.backend = "jax" if args_cli.ml_framework == "jax" else "numpy"
 
     # randomly sample a seed if seed = -1
     if args_cli.seed == -1:
@@ -134,21 +137,22 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # set the agent and environment seed from command line
     # note: certain randomization occur in the environment initialization so we set the seed here
+    agent_cfg = update_config(SAC_DEFAULT_CONFIG, agent_cfg)
     agent_cfg["seed"] = args_cli.seed if args_cli.seed is not None else agent_cfg["seed"]
     env_cfg.seed = agent_cfg["seed"]
 
     # specify directory for logging experiments
-    log_root_path = os.path.join("logs", "skrl", agent_cfg["agent"]["experiment"]["directory"])
+    log_root_path = os.path.join("logs", "skrl", agent_cfg["experiment"]["directory"])
     log_root_path = os.path.abspath(log_root_path)
     print(f"[INFO] Logging experiment in directory: {log_root_path}")
     # specify directory for logging runs: {time-stamp}_{run_name}
-    log_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + f"_{algorithm}_{args_cli.ml_framework}"
+    log_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + f"_ppol_{args_cli.ml_framework}"
     print(f"Exact experiment name requested from command line {log_dir}")
-    if agent_cfg["agent"]["experiment"]["experiment_name"]:
-        log_dir += f'_{agent_cfg["agent"]["experiment"]["experiment_name"]}'
+    if agent_cfg["experiment"]["experiment_name"]:
+        log_dir += f'_{agent_cfg["experiment"]["experiment_name"]}'
     # set directory into agent config
-    agent_cfg["agent"]["experiment"]["directory"] = log_root_path
-    agent_cfg["agent"]["experiment"]["experiment_name"] = log_dir
+    agent_cfg["experiment"]["directory"] = log_root_path
+    agent_cfg["experiment"]["experiment_name"] = log_dir
     # update log_dir
     log_dir = os.path.join(log_root_path, log_dir)
 
@@ -166,13 +170,6 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # create isaac environment
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
-    if args_cli.headless:
-        env.sim_cfg['vis_us'] = False
-        env.vertebra_viewer.if_vis = False
-
-    # convert to single-agent instance if required by the RL algorithm
-    if isinstance(env.unwrapped, DirectMARLEnv) and algorithm in ["ppo"]:
-        env = multi_agent_to_single_agent(env)
 
     # wrap for video recording
     if args_cli.video:
@@ -190,16 +187,32 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     env = SkrlVecEnvWrapper(env, ml_framework=args_cli.ml_framework)  # same as: `wrap_env(env, wrapper="auto")`
 
     # configure and instantiate the skrl runner
-    # https://skrl.readthedocs.io/en/latest/api/utils/runner.html
-    runner = Runner(env, agent_cfg)
+    models = {}
+    device = env_cfg.sim.device
+    models['policy'] = SharedModelSAC(env.observation_space, env.action_space, device, clip_actions=False)
+    models["critic_1"] = models["policy"]
+    models["critic_2"] = models["policy"]
+    models["target_critic_1"] = SharedModelSAC(env.observation_space, env.action_space, device, clip_actions=False)
+    models["target_critic_2"] = SharedModelSAC(env.observation_space, env.action_space, device, clip_actions=False)
 
-    # load checkpoint (if specified)
-    if resume_path:
-        print(f"[INFO] Loading model checkpoint from: {resume_path}")
-        runner.agent.load(resume_path)
+    # Instantiate a RandomMemory (without replacement) as experience replay memory
+    memory = RandomMemory(memory_size=agent_cfg['rollouts'], num_envs=env.num_envs, device=device, replacement=False)
 
-    # run training
-    runner.run()
+    ppol_agent = SAC(
+        models=models,
+        memory=memory,
+        cfg=agent_cfg,
+        observation_space=env.observation_space,
+        action_space=env.action_space,
+        device=device
+    )
+
+    # Configure and instantiate the RL trainer
+    cfg_trainer = {"timesteps": 200000, "headless": True}
+    trainer = SequentialTrainer(cfg=cfg_trainer, env=env, agents=ppol_agent)
+
+    # start training
+    trainer.train()
 
     # close the simulator
     env.close()

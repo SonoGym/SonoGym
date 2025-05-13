@@ -1,0 +1,22 @@
+seed: 42
+
+class: SAC
+rollouts: 500
+gradient_steps: 2           # gradient steps
+batch_size: 1024              # training batch size
+discount_factor: 0.99       # discount factor (gamma)
+polyak: 0.005               # soft update hyperparameter (tau)
+actor_learning_rate: 0.0001   # actor learning rate
+critic_learning_rate: 0.001  # critic learning rate
+random_timesteps: 100         # random exploration steps
+learning_starts: 100          # learning starts after this many steps
+grad_norm_clip: 1.0           # clipping coefficient for the norm of the gradients
+learn_entropy: True         # learn entropy
+entropy_learning_rate: 0.001 # entropy learning rate
+initial_entropy_value: 0.2  # initial entropy value
+mixed_precision: False      # enable automatic mixed precision for higher performance
+experiment:
+  directory: US_guidance          # experiment's parent directory
+  experiment_name: SAC_dm_default
+
+

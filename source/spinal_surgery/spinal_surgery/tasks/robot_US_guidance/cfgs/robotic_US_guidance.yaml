@@ -35,7 +35,7 @@ reward:
   w_pos: 0.03
 
 sim:
-  episode_length: 7 # 5 only for testing
+  episode_length: 10 # 5 only for testing
   patient_xz_range: [[100, 70, 1.0], [180, 200, 3.0]]
   patient_xz_init_range: [[100, 70, 1.5], [180, 200, 3.5]]
   if_use_ct: True

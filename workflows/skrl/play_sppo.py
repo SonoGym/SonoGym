@@ -224,7 +224,7 @@ def main():
             inputs = {'states': obs, 'taken_actions': actions}
             pred_cost = sppo_agent.cost_critic.act(inputs, role="cost_critic")[0].reshape((-1,))
 
-            actions[pred_cost > 0.2, :] = 0.0
+            actions[pred_cost > 0.5, :] = 0.0
             # env stepping
             obs, _, _, _, _ = env.step(actions)
         if args_cli.video:

@@ -1,9 +1,10 @@
-model_path: models/pix2pix_rand_down_up.pth
+model_path: ['models/pix2pix_rand_down_up.pth'] #  ['models/pix2pix_rand_down_up_2.pth', 'models/pix2pix_rand_down_up_3.pth', 'models/pix2pix_rand_down_up_4.pth', 'models/pix2pix_rand_down_up_5.pth'] #
 train_data_sample_path: models/training_samples
 
 label_res: 0.0015
 num_bins: 256
 reset_hist_interval: 10000000
+model_change_interval: 100
 elevation_downsample: 5 # 20
 
 CT: # CT cfgs to convert current HU CT inputs to network inputs

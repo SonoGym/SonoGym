@@ -244,3 +244,64 @@ class SharedModel(GaussianMixin, DeterministicMixin, Model):
                                         pos_features,
                                         quat_features], dim=-1))
             return values, {}   
+
+
+class SharedModelSAC(GaussianMixin, DeterministicMixin, Model):
+    def __init__(self, observation_space, action_space, device, clip_actions=False, clip_log_std=True, min_log_std=-20, max_log_std=2):
+        Model.__init__(self, observation_space, action_space, device)
+        GaussianMixin.__init__(self, clip_actions, clip_log_std, min_log_std, max_log_std, role="policy")
+        DeterministicMixin.__init__(self, clip_actions, role="value")
+
+        self.features_extractor = nn.Sequential(nn.Conv2d(observation_space.shape[0], 32, kernel_size=8, stride=4),
+                                                nn.ReLU(),
+                                                nn.Conv2d(32, 64, kernel_size=4, stride=2),
+                                                nn.ReLU(),
+                                                nn.Conv2d(64, 64, kernel_size=3, stride=1),
+                                                nn.ReLU(),
+                                                nn.Flatten(),
+                                                )
+        self.net_features = nn.Linear(20160, 512)
+        
+        self.net_actions = nn.Sequential(nn.Linear(action_space.shape[0], 128),
+                                         nn.ELU(),
+                                         nn.Linear(128, 128),
+                                         nn.ELU(),
+                                         nn.Linear(128, 64))
+
+        self.net = nn.Sequential(nn.Linear(512, 256),
+                                 nn.ELU(),
+                                 nn.Linear(256, 128),
+                                 nn.ELU(),
+                                 nn.Linear(128, self.num_actions))
+        
+        self.net_value = nn.Sequential(nn.Linear(512 + 64, 256),
+                                       nn.ELU(),
+                                       nn.Linear(256, 128),
+                                       nn.ELU(),
+                                       nn.Linear(128, 1))
+
+        self.log_std_parameter = nn.Parameter(torch.zeros(self.num_actions))
+
+    def act(self, inputs, role):
+        if role == "policy":
+            return GaussianMixin.act(self, inputs, role)
+        elif role == "critic_1" or role == "critic_2" or role == "target_critic_1" or role == "target_critic_2":
+            return DeterministicMixin.act(self, inputs, role)
+
+    def compute(self, inputs, role):
+        states = inputs["states"]
+        space = self.tensor_to_space(states, self.observation_space)
+
+        image = space
+
+        features = self.net_features(self.features_extractor(image))
+    
+        if role == "policy":
+            mean_actions = self.net(features)
+
+            return mean_actions, self.log_std_parameter, {}
+        elif role == "critic_1" or role == "critic_2" or role == "target_critic_1" or role == "target_critic_2":
+            actions = inputs["taken_actions"]
+            action_features = self.net_actions(actions)
+            values = self.net_value(torch.cat([features, action_features], dim=-1))
+            return values, {}   

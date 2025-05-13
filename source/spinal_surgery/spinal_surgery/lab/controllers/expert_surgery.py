@@ -98,7 +98,7 @@ class ExpertSurgery:
         # TODO: for collect dataset
         insert_goal = torch.logical_or(along_traj, safety_critical)
         # TODO for real expert:
-        insert_goal = along_traj
+        # insert_goal = along_traj
         outside_patient = torch.logical_not(insert_goal)
 
         tip_pos_diff = torch.zeros_like(tip_pos_diff_1, device=self.device)
