@@ -66,7 +66,7 @@ def main(cfg: EvalPipelineConfig):
 
     # Load the dataset
     dataset_meta = LeRobotDatasetMetadata(repo_id="yunkao/us-guidance",
-                                          root="/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/Isaac-robot-US-guidance-v0-single")
+                                          root="lerobot-dataset/Isaac-robot-US-guidance-v0-single-new")
     # Create the policy
     print(cfg.policy)
     policy: PreTrainedPolicy = make_policy(cfg=cfg.policy, ds_meta=dataset_meta)
