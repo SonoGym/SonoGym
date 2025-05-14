@@ -75,7 +75,7 @@ After downloading the lerobot-dataset, you can also train ACT or diffusion polic
 ```bash
 python /path-to-lerobot/lerobot/scripts/train.py --config_path=workflows/lerobot/train_surgery_{method}_cfg.json
 ```
-where ```method``` can be either 'diffusion' or 'act'
+where ```method``` can be either 'diffusion' or 'act'. Remmember to change ```"dataset": "root"``` to the path of your own dataset.
 
 ### Change environment settings
 Environment configurations are located under

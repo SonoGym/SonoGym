@@ -1,7 +1,7 @@
 {
     "dataset": {
-        "repo_id": "yunkao/us-guidance",
-        "revision": "v2",
+        "repo_id": "yunkao/expert_datasets_models_SonoGym",
+        "revision": "v1",
         "episodes": null,
         "use_imagenet_stats": true,
         "video_backend": "pyav"
