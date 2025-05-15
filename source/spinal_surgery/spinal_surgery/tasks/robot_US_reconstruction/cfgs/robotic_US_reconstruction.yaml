@@ -41,12 +41,12 @@ action:
   max_action: [4, 4, 0.2, 0.2] # [4, 4, 0.2, 0.2]
 
 sim:
-  episode_length: 10 # 5
+  episode_length: 10 # 3
   patient_xz_range: [[100, 70, 0.0], [180, 220, 6.28]]
   patient_xz_init_range: [[100, 70, 1.5], [220, 150, 3.5]]
   if_use_ct: True
   ct_range: [-300, 3000]
-  vis_us: False
+  vis_us: True
   vis_rec: False
   vis_seg_map: False
 

@@ -1,5 +1,5 @@
 robot:
-  type: 'fr3'  # 'kuka', fr3
+  type: 'kuka'  # 'kuka', fr3
   pos: [0.0, -0.75, 0.5]
   joint_pos: [1.5, -0.1, 0.0, -1.6, 0.0, 1.6, 0.0]
 

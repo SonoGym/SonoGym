@@ -37,21 +37,32 @@ python -m pip install -e source/spinal_surgery
 
 ### Download the dataset and models
 
-Download the dataset from https://huggingface.co/datasets/yunkao/expert_datasets_models_SonoGym following instructions in https://huggingface.co/docs/hub/en/datasets-downloading
-
-
+Download the dataset from https://huggingface.co/datasets/yunkao/SonoGym_assets_expert_US_model
 
 The folder contains 3 groups of large files:
 - assets: simulation assets including medical imaging, human models, and robot.
 - models: pix2pix models for learning-based ultrasound simulation.
 - lerobot-dataset: datasets allow training imitation learning policies with lerobot repo (https://github.com/huggingface/lerobot), not necessary for training RL agents.
 
-Put the downloaded directories in the following path respectively:
+Unzip and put the downloaded directories in the following path respectively:
 ```
 assets -> SonoGym/source/spinal_surgery/spinal_surgery/assets
 models -> SonoGym/models
 lerobot-dataset -> SonoGym/lerobot-dataset
 ```
+
+## Play with teleoperation
+Yon can play the robot with keyboard in a task environment with the following command:
+
+```bash
+python workflows/teleoperation/teleop_se3_agent.py --task=Isaac-robot-US-guidance-v0
+```
+
+```--task``` argument can be chosen from
+- Isaac-robot-US-guidance-v0
+- Isaac-robot-US-guided-surgery-v0
+- Isaac-robot-US-reconstruction-v0
+
 
 ## Training and testing
 
@@ -62,10 +73,6 @@ You can train PPO agent with skrl with the following command:
 ```bash
 python workflows/skrl/train.py --task=Isaac-robot-US-guidance-v0
 ```
-Task ids can be chosen from
-- Isaac-robot-US-guidance-v0
-- Isaac-robot-US-guided-surgery-v0
-- Isaac-robot-US-reconstruction-v0
 
 You can also train PPO with a cost predictor only for ```Isaac-robot-US-guided-surgery-v0``` with the following command:
 ```bash

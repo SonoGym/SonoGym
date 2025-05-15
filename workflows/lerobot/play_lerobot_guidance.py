@@ -58,7 +58,7 @@ def main(cfg: EvalPipelineConfig):
     env_cfg = parse_env_cfg(
         "Isaac-robot-US-guidance-v0", 
         device="cuda", 
-        num_envs=50, 
+        num_envs=100, 
         use_fabric=True
     )
 
@@ -66,7 +66,7 @@ def main(cfg: EvalPipelineConfig):
 
     # Load the dataset
     dataset_meta = LeRobotDatasetMetadata(repo_id="yunkao/expert_datasets_models_SonoGym",
-                                          root="lerobot-dataset/Isaac-robot-US-guidance-v0-single-new")
+                                          root="lerobot-dataset/Isaac-robot-US-guidance-v0-single")
     # Create the policy
     print(cfg.policy)
     policy: PreTrainedPolicy = make_policy(cfg=cfg.policy, ds_meta=dataset_meta)
