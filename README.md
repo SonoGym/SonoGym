@@ -35,14 +35,18 @@ git clone git@github.com:SonoGym/SonoGym.git
 python -m pip install -e source/spinal_surgery
 ```
 
-### Download the dataset and models
+### Download dataset, simulation assets and ultrasound simulation models
 
-Download the dataset from https://huggingface.co/datasets/yunkao/SonoGym_assets_expert_US_model
+Download the dataset from https://huggingface.co/datasets/yunkao/SonoGym_lerobot_dataset
 
-The folder contains 3 groups of large files:
+This dataset allow training imitation learning policies with lerobot repo (https://github.com/huggingface/lerobot) for surgery and navigation, not necessary for training RL agents.
+
+Download the simulation assets and ultrasound simulation models from https://huggingface.co/datasets/yunkao/SonoGym_assets_models
+
+The folder contains 2 archived folders:
 - assets: simulation assets including medical imaging, human models, and robot.
 - models: pix2pix models for learning-based ultrasound simulation.
-- lerobot-dataset: datasets allow training imitation learning policies with lerobot repo (https://github.com/huggingface/lerobot), not necessary for training RL agents.
+
 
 Unzip and put the downloaded directories in the following path respectively:
 ```
