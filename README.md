@@ -22,10 +22,10 @@ Our platform enables benchmarking of various algorithms, including reinforcement
 
 ```bash
 # Option 1: HTTPS
-git clone https://github.com/ToolManChang/isaaclab_ultrasound_surgery.git
+git clone https://github.com/SonoGym/SonoGym.git
 
 # Option 2: SSH
-git clone git@github.com:ToolManChang/isaaclab_ultrasound_surgery.git
+git clone git@github.com:SonoGym/SonoGym.git
 ```
 
 
@@ -37,7 +37,11 @@ python -m pip install -e source/spinal_surgery
 
 ### Download the dataset and models
 
-Download the dataset from https://huggingface.co/datasets/yunkao/expert_datasets_models_SonoGym
+Download the dataset from https://huggingface.co/datasets/yunkao/expert_datasets_models_SonoGym following instructions in https://huggingface.co/docs/hub/en/datasets-downloading
+
+We recommend using the following python command:
+
+```
 
 The folder contains 3 groups of large files:
 - assets: simulation assets including medical imaging, human models, and robot.
