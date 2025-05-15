@@ -48,9 +48,9 @@ The folder contains 3 groups of large files:
 
 Put the downloaded directories in the following path respectively:
 ```
-assets -> isaaclab_ultrasound_surgery/source/spinal_surgery/spinal_surgery/assets
-models -> isaaclab_ultrasound_surgery/models
-lerobot-dataset -> isaaclab_ultrasound_surgery/lerobot-dataset
+assets -> SonoGym/source/spinal_surgery/spinal_surgery/assets
+models -> SonoGym/models
+lerobot-dataset -> SonoGym/lerobot-dataset
 ```
 
 ## Training and testing
