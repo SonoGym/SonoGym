@@ -1,6 +1,6 @@
 {
     "dataset": {
-        "root": "/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/Isaac-robot-US-guided-surgery-v0-single-768",
+        "root": "/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/Isaac-robot-US-guided-surgery-v0-single-new",
         "repo_id": "yunkao/expert_datasets_models_SonoGym",
         "revision": "v1",
         "episodes": null,

@@ -18,7 +18,7 @@
         "chunk_size": 100,
 
         "vision_backbone": "resnet18",
-        "pretrained_backbone_weights": "null",
+        "pretrained_backbone_weights": null,
         "replace_final_stride_with_dilation": false,
         "pre_norm": false,
 
