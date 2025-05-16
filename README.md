@@ -88,6 +88,7 @@ python workflows/teleoperation/teleop_se3_agent.py --task=Isaac-robot-US-guidanc
 
 ### Training with default settings
 
+#### Reinforcement learning agents
 You can train PPO agent with skrl with the following command:
 
 ```bash
@@ -99,6 +100,12 @@ You can also train PPO with a cost predictor only for ```Isaac-robot-US-guided-s
 python workflows/skrl/train_sppo.py
 ```
 
+The reinforcement learning agent dafault configs can reproduce our results in the paper. You can modify the configs at 
+```
+source/spinal_surgery/spinal_surgery/tasks/{tasks_name}/agents/skrl_{algorithm}_cfg.yaml
+```
+
+#### Imitation learning agents
 After downloading the lerobot-dataset, you can also train ACT or diffusion policy with:
 
 ```bash
