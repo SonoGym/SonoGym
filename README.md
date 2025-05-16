@@ -66,7 +66,7 @@ Specifically, they are collected with the following settings:
 
 Put the downloaded dataset in the following path:
 ```
-lerobot-dataset -> SonoGym/lerobot-dataset
+SonoGym/lerobot-dataset
 ```
 
 ## Play with teleoperation
