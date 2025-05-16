@@ -34,17 +34,11 @@ git clone git@github.com:SonoGym/SonoGym.git
 ```bash
 python -m pip install -e source/spinal_surgery
 ```
-
-### Download dataset, simulation assets and ultrasound simulation models
-
-Download the dataset from https://huggingface.co/datasets/yunkao/SonoGym_lerobot_dataset
-
-This dataset allow training imitation learning policies with lerobot repo (https://github.com/huggingface/lerobot) for surgery and navigation, not necessary for training RL agents.
-
+### Download simulation assets and ultrasound simulation models
 Download the simulation assets and ultrasound simulation models from https://huggingface.co/datasets/yunkao/SonoGym_assets_models
 
 The folder contains 2 archived folders:
-- assets: simulation assets including medical imaging, human models, and robot.
+- assets: simulation assets including medical imaging, human models, robots and end-effectors.
 - models: pix2pix models for learning-based ultrasound simulation.
 
 
@@ -52,6 +46,26 @@ Unzip and put the downloaded directories in the following path respectively:
 ```
 assets -> SonoGym/source/spinal_surgery/spinal_surgery/assets
 models -> SonoGym/models
+```
+
+### Download expert dataset (optional)
+
+Download the dataset from https://huggingface.co/datasets/yunkao/SonoGym_lerobot_dataset following the instruction in https://huggingface.co/docs/hub/en/datasets-downloading
+
+This dataset allow training imitation learning policies with lerobot repo (https://github.com/huggingface/lerobot) for surgery and navigation, not necessary for training RL agents.
+
+Specifically, they are collected with the following settings:
+- ```Isaac-robot-US-guidance-v0-single```: ultrasound guidance, single patient, model-based US simulation
+- ```Isaac-robot-US-guidance-v0-single-net```: ultrasound guidance,single patient, learning-based US simulation
+- ```Isaac-robot-US-guidance-5-models-v0```: ultrasound guidance,single patient, 4 learning-based US simulation networks
+- ```Isaac-robot-US-guided-surgery-v0-single-new```: ultrasound-guided surgery, single patient, model-based US simulation
+- ```Isaac-robot-US-guided-surgery-v0-single-net-new```: ultrasound-guided surgery, single patient, learning-based US simulation
+- ```Isaac-robot-US-guided-surgery-v0-5-net```: ultrasound-guided surgery,single patient, 4 learning-based US simulation networks
+- ```Isaac-robot-US-guided-surgery-v0-5```: ultrasound-guided surgery,5 patient, model-based US simulation
+
+
+Put the downloaded dataset in the following path:
+```
 lerobot-dataset -> SonoGym/lerobot-dataset
 ```
 
@@ -90,7 +104,8 @@ After downloading the lerobot-dataset, you can also train ACT or diffusion polic
 ```bash
 python /path-to-lerobot/lerobot/scripts/train.py --config_path=workflows/lerobot/train_surgery_{method}_cfg.json
 ```
-where ```method``` can be either 'diffusion' or 'act'. Remmember to change ```"dataset": "root"``` to the path of your own dataset.
+where ```method``` can be either 'diffusion' or 'act'. Remmember to change ```"dataset": "root"``` to the path of your local dataset like ```path-to-repo/SonoGym/lerobot-dataset/Isaac-robot-US-guidance-v0-single-net```.
+
 
 ### Change environment settings
 Environment configurations are located under
