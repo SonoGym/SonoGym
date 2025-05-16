@@ -50,7 +50,7 @@ models -> SonoGym/models
 
 ### Download expert dataset (optional)
 
-Download the dataset from https://huggingface.co/datasets/yunkao/SonoGym_lerobot_dataset following the instruction in https://huggingface.co/docs/hub/en/datasets-downloading
+Download the dataset from https://huggingface.co/datasets/yunkao/SonoGym_lerobot_dataset following the instruction in https://huggingface.co/docs/hub/en/datasets-downloading or https://huggingface.co/docs/huggingface_hub/main/en/guides/download.
 
 This dataset allow training imitation learning policies with lerobot repo (https://github.com/huggingface/lerobot) for surgery and navigation, not necessary for training RL agents.
 
