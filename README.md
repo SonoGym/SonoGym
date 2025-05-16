@@ -64,7 +64,7 @@ Specifically, they are collected with the following settings:
 - ```Isaac-robot-US-guided-surgery-v0-5```: ultrasound-guided surgery,5 patient, model-based US simulation
 
 
-Put the downloaded dataset in the following path:
+It is recommended to put the downloaded dataset in the following path:
 ```
 SonoGym/lerobot-dataset
 ```

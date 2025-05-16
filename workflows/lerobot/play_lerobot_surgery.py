@@ -90,7 +90,7 @@ def main(cfg: EvalPipelineConfig):
     env = gym.make("Isaac-robot-US-guided-surgery-v0", cfg=env_cfg, render_mode=None)
 
     # Load the dataset
-    dataset_meta = LeRobotDatasetMetadata(repo_id="yunkao/expert_datasets_models_SonoGym",
+    dataset_meta = LeRobotDatasetMetadata(repo_id="yunkao/SonoGym_lerobot_dataset",
                                           root="lerobot-dataset/Isaac-robot-US-guided-surgery-v0-single-new")
     # Create the policy
     print(cfg.policy)
