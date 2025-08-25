@@ -1,0 +1,11 @@
+model:
+  hidden_size: 256
+  conv_layers: [16, 32, 64, 128, 256]
+  gru_num_layers: 2
+
+train:
+  history_length: 10
+  batch_size: 1
+  buffer_size: 400
+  lr: 0.00001
+  max_iter_per_episode: 300

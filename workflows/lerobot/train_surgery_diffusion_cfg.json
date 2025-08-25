@@ -1,0 +1,146 @@
+{
+    "dataset": {
+        "root": "/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/Isaac-robot-US-guided-surgery-v0-single-new",
+        "repo_id": "yunkao/expert_datasets_models_SonoGym",
+        "revision": "v1",
+        "episodes": null,
+        "use_imagenet_stats": true,
+        "video_backend": "pyav"
+    },
+    "env": null,
+    "policy": {
+        "type": "diffusion",
+        "device": "cuda",
+        "use_amp": false,
+
+        "n_obs_steps": 2,
+        "n_action_steps": 8,
+        "horizon": 16,
+
+        "vision_backbone": "resnet18",
+        "crop_shape": [
+            50, 37
+        ],
+        "crop_is_random": true,
+        "pretrained_backbone_weights": null,
+        "use_group_norm": false,
+        "spatial_softmax_num_keypoints": 32,
+        "use_separate_rgb_encoder_per_camera": false,
+        
+        "down_dims": [512, 1024, 2048],
+        "kernel_size": 5,
+        "n_groups": 8,
+        "diffusion_step_embed_dim": 128,
+        "use_film_scale_modulation": true,
+
+        "noise_scheduler_type": "DDPM",
+        "num_train_timesteps": 100,
+        "beta_schedule": "squaredcos_cap_v2",
+        "beta_start": 0.0001,
+        "beta_end": 0.02,
+        "prediction_type": "epsilon",
+        "clip_sample": true,
+        "clip_sample_range": 1.0,
+
+        "num_inference_steps": null,
+
+        "do_mask_loss_for_padding": false,
+        "optimizer_lr": 1e-04,
+        "optimizer_betas": [
+            0.95,
+            0.999
+        ],
+        "optimizer_eps": 1e-08,
+        "optimizer_weight_decay": 1e-06,
+        "scheduler_name": "cosine",
+        "scheduler_warmup_steps": 500,
+
+        "normalization_mapping": {
+            "STATE": "MIN_MAX",
+            "ACTION": "MIN_MAX",
+            "VISUAL": "MEAN_STD"
+        },
+        "input_features": {
+            "observation.images.slice_0": {
+                "type": "VISUAL",
+                "shape": [
+                    50, 37, 3
+                ]
+            },
+            "observation.images.slice_1": {
+                "type": "VISUAL",
+                "shape": [
+                    50, 37, 3
+                ]
+            },
+            "observation.images.slice_2": {
+                "type": "VISUAL",
+                "shape": [
+                    50, 37, 3
+                ]
+            },
+            "observation.images.slice_3": {
+                "type": "VISUAL",
+                "shape": [
+                    50, 37, 3
+                ]
+            },
+            "observation.images.slice_4": {
+                "type": "VISUAL",
+                "shape": [
+                    50, 37, 3
+                ]
+            },
+            "observation.state": {
+                "type": "STATE",
+                "shape": [
+                    7
+                ]
+            }
+        },
+        "output_features": {
+            "action": {
+                "type": "ACTION",
+                "shape": [
+                    6
+                ]
+            }
+        }
+    },
+    "output_dir": null,
+    "job_name": "us_surgery_diffusion_uint8",
+    "resume": false,
+    "seed": 1000,
+    "num_workers": 4,
+    "batch_size": 8,
+    "steps": 500000,
+    "eval_freq": 25000,
+    "log_freq": 200,
+    "save_checkpoint": true,
+    "save_freq": 25000,
+    "use_policy_training_preset": true,
+    "optimizer": {
+        "type": "adamw",
+        "lr": 1e-04,
+        "betas": [
+            0.95,
+            0.999
+        ],
+        "eps": 1e-08,
+        "weight_decay": 1e-06,
+        "grad_clip_norm": 10.0
+    },
+    "scheduler": null,
+    "eval": {
+        "n_episodes": 50,
+        "batch_size": 50,
+        "use_async_envs": false
+    },
+    "wandb": {
+        "enable": true,
+        "disable_artifact": false,
+        "project": "0506-lerobot-us-surgery",
+        "entity": null,
+        "notes": null
+    }
+}

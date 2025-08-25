@@ -1,0 +1,24 @@
+model_path: ['models/pix2pix_rand_down_up.pth'] #  ['models/pix2pix_rand_down_up_2.pth', 'models/pix2pix_rand_down_up_3.pth', 'models/pix2pix_rand_down_up_4.pth', 'models/pix2pix_rand_down_up_5.pth'] #
+train_data_sample_path: models/training_samples
+
+label_res: 0.0015
+num_bins: 256
+reset_hist_interval: 10000000
+model_change_interval: 100
+elevation_downsample: 5 # 20
+
+CT: # CT cfgs to convert current HU CT inputs to network inputs
+  range: [0, 150] # [0, 150] [-2000, 3100] intensity range
+  res: 0.0015 # m
+  size: [256, 256] # pixel size
+
+
+model:
+  input_noise: False
+  spatial_dims: 2
+  in_channels: 1
+  out_channels: 1
+  channels: [64, 128, 512, 512, 512, 512, 512]
+  strides: [2, 2, 2, 2, 2, 2]
+  num_res_units: 1
+  dropout: 0.0

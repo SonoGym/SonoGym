@@ -1,0 +1,26 @@
+# Configuration for a wandb sweep
+# Running the following command under the hood:
+
+program: scripts/reinforcement_learning/fsrl/train_cpo_agent.py
+description: "surgery_CPO_cost_2_sweep"
+name: surgery_PPOl_cost_2_sweep
+method: bayes
+metric:
+  goal: maximize
+  name: total_reward
+parameters:
+  agent.repeat_per_collect: 
+    values: [1, 5, 10]
+  agent.batch_size: 
+    values: [64, 1024, 2048]
+  agent.lr: 
+    values: [0.0001, 0.0003, 0.001]
+  agent.episode_per_collect:
+    values: [1, 2, 4]
+
+command:
+  - /isaac-sim/python.sh
+  - ${program}
+  - "--headless"
+  - "--task=Isaac-robot-US-guided-surgery-v0"
+  - ${args_no_hyphens}

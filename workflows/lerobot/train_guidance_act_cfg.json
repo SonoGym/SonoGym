@@ -1,0 +1,98 @@
+{
+    "dataset": {
+        "root": "/home/yunkao/git/IsaacLabExtensionTemplate/lerobot-dataset/Isaac-robot-US-guidance-v0-single",
+        "repo_id": "yunkao/expert_datasets_models_SonoGym",
+        "revision": "v1",
+        "episodes": null,
+        "use_imagenet_stats": true,
+        "video_backend": "pyav"
+    },
+    "env": null,
+    "policy": {
+        "type": "act",
+        "device": "cuda",
+        "use_amp": false,
+
+        "n_obs_steps": 1,
+        "n_action_steps": 100,
+        "chunk_size": 100,
+
+        "vision_backbone": "resnet18",
+        "pretrained_backbone_weights": "ResNet18_Weights.IMAGENET1K_V1",
+        "replace_final_stride_with_dilation": false,
+        "pre_norm": false,
+
+        "dim_model": 512,
+        "n_heads": 8,
+        "dim_feedforward": 3200,
+        "feedforward_activation": "relu",
+        "n_encoder_layers": 4,
+        "n_decoder_layers": 1,
+        "use_vae": true,
+        "latent_dim": 32,
+        "n_vae_encoder_layers": 4,
+        "temporal_ensemble_coeff": null,
+        "dropout": 0.1,
+        "kl_weight": 10.0,
+        "optimizer_lr": 1e-05,
+        "optimizer_weight_decay": 0.0001,
+        "optimizer_lr_backbone": 1e-05,
+
+        "normalization_mapping": {
+            "STATE": "MEAN_STD",
+            "ACTION": "MEAN_STD"
+        },
+        "input_features": {
+            "observation.images": {
+                "type": "VISUAL",
+                "shape": [
+                    200, 150, 3
+                ]
+            }
+        },
+        "output_features": {
+            "action": {
+                "type": "ACTION",
+                "shape": [
+                    3
+                ]
+            }
+        }
+    },
+    "output_dir": null,
+    "job_name": "us_guidance_act",
+    "resume": false,
+    "seed": 1000,
+    "num_workers": 4,
+    "batch_size": 8,
+    "steps": 250000,
+    "eval_freq": 25000,
+    "log_freq": 200,
+    "save_checkpoint": true,
+    "save_freq": 25000,
+    "use_policy_training_preset": true,
+    "optimizer": {
+        "type": "adamw",
+        "lr": 1e-05,
+        "betas": [
+            0.9,
+            0.999
+        ],
+        "eps": 1e-08,
+        "weight_decay": 0.0001,
+        "grad_clip_norm": 10.0
+    },
+    "scheduler": null,
+    "eval": {
+        "n_episodes": 50,
+        "batch_size": 50,
+        "use_async_envs": false
+    },
+    "wandb": {
+        "enable": true,
+        "disable_artifact": false,
+        "project": "lerobot-us-guidance",
+        "entity": null,
+        "notes": null
+    }
+}

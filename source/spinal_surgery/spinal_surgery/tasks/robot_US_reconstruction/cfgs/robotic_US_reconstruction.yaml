@@ -1,0 +1,54 @@
+robot:
+  pos: [0.0, -0.5, 0.0]
+  joint_pos: [1.5, -0.5, 0.0, -1.0, 0.0, 1.6, 0.0]
+
+patient:
+  pos: [0.2, -0.2, 0.7]
+  euler_yxz: [-90.0, -90.0, 0.0]
+  id_list: ['s0015'] #, 's0024', 's0028', 's0029', 's0030']
+  label_res: 0.0015 # m'
+
+bed:
+  pos: [0.0, 0.0, 0.1]
+  euler_xyz: [90, 0.0, 90]
+  scale: 0.0004
+
+motion_planning:
+  vertebra_to_US_2d_pos: [0.0, 0.0]
+  US_roll_adj: 0.0
+  vertebra_to_US_rand_max: 10.0
+  US_roll_rand_max: 0.1
+  
+
+reconstruction:
+  img_size: [50, 80]
+  img_res: 0.001
+  target_vertebra: 'vertebrae_L4'
+  volume_size: [40, 40, 40]
+  volume_res: 0.003
+  missing_rate: 0.2
+  max_roll_adj: 0.4
+  add_height: 0.0
+
+reward:
+  incremental_cov: 0.01
+  action_length:
+    w_pos: 0.0001 # 1e-4
+    w_angle: 0.01 # 1e-2
+
+action: 
+  scale: [2, 2, 0.1, 0.1] # [2, 2, 0.1, 0.1]
+  max_action: [4, 4, 0.2, 0.2] # [4, 4, 0.2, 0.2]
+
+sim:
+  episode_length: 10 # 3
+  patient_xz_range: [[100, 70, 0.0], [180, 220, 6.28]]
+  patient_xz_init_range: [[100, 70, 1.5], [220, 150, 3.5]]
+  if_use_ct: True
+  ct_range: [-300, 3000]
+  vis_us: True
+  vis_rec: False
+  vis_seg_map: False
+
+if_record_traj: True
+record_path: /recordings/robot_US_reconstruction/

@@ -1,0 +1,65 @@
+use_wandb: True
+
+robot:
+  type: 'fr3'  # 'kuka', fr3
+  pos: [0.0, -0.5, 0.0]
+  joint_pos: [1.5, -0.5, 0.0, -1.0, 0.0, 1.6, 0.0]
+
+robot_drill:
+  pos: [0.0, 0.5, 0.1] # [0.0, 0.5, 0.05] # 
+  joint_pos: [-1.5, -0.2, 0.0, -1.3, 0.0, 1.8, 0.0] # [-1.6, -0.0, 0.0, -1.3, 0.0, 1.8, 0.0] # datacollection  #[[-1.4749,  0.0356,  0.0065, -1.5546, -0.0807,  1.4267,  0.8291],
+
+patient:
+  pos: [0.2, -0.2, 0.7] # 0.7
+  euler_yxz: [-90.0, -90.0, 0.0]
+  id_list:  ['s0010'] #, ['s0015'] # 's0024', 's0028', 's0029', 's0030'] # 5 to 1:'s0010', 's0014', 's0015'
+  label_res: 0.0015 # m
+  target_anatomy: 'vertebrae_L4'
+
+bed:
+  pos: [0.0, 0.0, 0.08]
+  euler_xyz: [90, 0.0, 90]
+  scale: 0.0004
+
+motion_planning:
+  joint_pos_rand_max: [0.2, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1] #[0.3, 0.25, 0.2, 0.2, 0.2, 0.2, 0.2] # data collection: 
+  vertebra_to_US_2d_pos: [-30.0, 0.0] # [-30, 0.0]
+  US_roll_adj: -0.4
+  vertebra_to_US_rand_max: 5.0 # 10.0
+  US_roll_rand_max: 0.1
+  scale: [[2, 2, 0.1]]
+
+observation: 
+  3D: True
+  downsample: 4
+  mode: 'US' # 'seg', 'CT', 'US'
+  scale: 0.02 # 0.1, 0.0005, 0.1 for learning-based, 0.02 for model-based
+  scale_net: 0.1
+
+action: 
+  mode: 'continuous' # 'discrete', 'continuous'
+  scale: [0.1, 0.1, 0.1, 1.0, 1.0, 1.0]  # [0.1, 0.1, 0.1, 1.0, 1.0, 1.0]
+  max_action: [0.03, 0.03, 0.03, 0.1, 0.1, 0.1]  # [0.03, 0.03, 0.03, 0.1, 0.1, 0.1]
+
+reward:
+  safe_height: 0.05 # 5cm # 10 cm
+  w_pos: 30.0
+  w_insertion: 300.0 # 100
+  w_angle: 5.0
+  w_cost: 0.0 # 
+
+
+sim:
+  episode_length: 5 # 4 10
+  patient_xz_range: [[100, 70, 1.5], [180, 200, 3.5]]
+  patient_xz_init_range: [[100, 70, 1.5], [180, 200, 3.5]]
+  if_use_ct: True
+  us: 'conv'
+  ct_range: [-300, 3000]
+  vis_us: False
+  vis_int: 5
+  vis_seg_map: False
+  
+
+
+

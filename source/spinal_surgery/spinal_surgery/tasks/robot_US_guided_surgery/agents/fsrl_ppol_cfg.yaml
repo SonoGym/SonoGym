@@ -1,0 +1,19 @@
+
+task: 'Isaac-robot-US-guided-surgery-v0'
+epoch: 100000
+episode_per_collect: 4
+repeat_per_collect: 2  # increasing this can improve efficiency, but less stability
+buffer_size: 4096 # rollout * episode_per_collect
+batch_size: 64
+step_per_epoch: 10 # small number, not effective
+lr: 0.0001
+cost_limit: 100.0
+vf_coef: 10.0
+norm_adv: True
+target_kl: 100 # not effective
+recompute_adv: True
+action_scaling: False
+logdir: "logs"
+project: "fast-safe-rl"
+prefix: "ppol"
+suffix: "default_cost_limit_1"

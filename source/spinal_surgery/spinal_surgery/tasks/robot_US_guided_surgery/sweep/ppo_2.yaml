@@ -1,0 +1,31 @@
+# Configuration for a wandb sweep
+# Running the following command under the hood:
+
+program: scripts/reinforcement_learning/skrl/train.py
+description: "surgery_PPO_sweep"
+name: surgery_PPO_sweep
+method: bayes
+metric:
+  goal: maximize
+  name: total_reward
+parameters:
+  agent.agent.rollouts: 
+    values: [16]
+  agent.agent.mini_batches: 
+    values: [32]
+  agent.agent.learning_epochs: 
+    values: [5]
+  agent.agent.ratio_clip:
+    values: [0.0, 0.1, 0.2]
+  agent.agent.value_clip: 
+    values: [0.0, 0.1, 0.2]
+  agent.agent.value_loss_scale: 
+    values: [0.1, 1.0, 3.0, 10.0]
+
+command:
+  - /isaac-sim/python.sh
+  - ${program}
+  - "--headless"
+  - "--task=Isaac-robot-US-guided-surgery-v0"
+  - "--algorithm=PPO"
+  - ${args_no_hyphens}
