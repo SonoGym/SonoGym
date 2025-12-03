@@ -432,9 +432,11 @@ class USSlicer(LabelImgSlicer):
                 plt.figure(3, figsize=(first_n * 2, 3))
                 plt.clf()
                 plt.imshow(
-                    (combined_img_np.T / np.max(combined_img_np) * 255).astype(
-                        np.uint8
-                    ),
+                    (
+                        (combined_img_np.T - np.min(combined_img_np))
+                        / (np.max(combined_img_np) - np.min(combined_img_np))
+                        * 255
+                    ).astype(np.uint8),
                     cmap="gray",
                 )  # 30
                 plt.pause(0.0001)
@@ -442,9 +444,11 @@ class USSlicer(LabelImgSlicer):
                 plt.figure(3, figsize=(first_n * 2, 3))
                 plt.clf()
                 plt.imshow(
-                    (combined_img_np.T / np.max(combined_img_np) * 255).astype(
-                        np.uint8
-                    ),
+                    (
+                        (combined_img_np.T - np.min(combined_img_np))
+                        / (np.max(combined_img_np) - np.min(combined_img_np))
+                        * 255
+                    ).astype(np.uint8),
                     cmap="gray",
                 )
                 plt.pause(0.0001)
