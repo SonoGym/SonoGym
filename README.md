@@ -32,7 +32,7 @@ git clone git@github.com:SonoGym/SonoGym.git
 - Using a python interpreter that has Isaac Lab installed, install the library
 
 ```bash
-python -m pip install -e source/spinal_surgery
+python -m pip install -e source/spinal_surgery --no-dependencies
 ```
 ### Download simulation assets and ultrasound simulation models
 Download the simulation assets and ultrasound simulation models from https://huggingface.co/datasets/yunkao/SonoGym_assets_models
@@ -86,6 +86,8 @@ python workflows/teleoperation/teleop_se3_agent.py --task=Isaac-robot-US-guidanc
 ## Training and testing
 
 ### Training with default settings
+
+Before running the following training scripts, set all environment visualization to ```false``` following the **Change environment settings** section.
 
 #### Reinforcement learning agents
 You can train PPO agent with skrl with the following command:
