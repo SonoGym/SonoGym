@@ -43,7 +43,7 @@ sim:
   us: 'net' # 'conv', 'net', 'both'
   vis_us: True
   vis_int: 5
-  vis_seg_map: False
+  vis_seg_map: True
 
 if_record_traj: True
 record_path: /recordings/robot_US_guidance/

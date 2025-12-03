@@ -46,8 +46,8 @@ sim:
   patient_xz_init_range: [[100, 70, 1.5], [220, 150, 3.5]]
   if_use_ct: True
   ct_range: [-300, 3000]
-  vis_us: True
-  vis_rec: False
+  vis_us: False
+  vis_rec: True
   vis_seg_map: False
 
 if_record_traj: True

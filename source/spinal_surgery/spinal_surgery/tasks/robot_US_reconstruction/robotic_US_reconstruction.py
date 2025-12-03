@@ -386,9 +386,9 @@ class roboticUSRecEnv(DirectRLEnv):
                     retain_accelerations=False,
                     linear_damping=0.0,
                     angular_damping=0.0,
-                    max_linear_velocity=1000.0,
-                    max_angular_velocity=1000.0,
-                    max_depenetration_velocity=1.0,
+                    max_linear_velocity=0.000001,
+                    max_angular_velocity=0.000001,
+                    max_depenetration_velocity=0.00001,
                     solver_position_iteration_count=8,
                     solver_velocity_iteration_count=0,
                 ),  # Improves a lot of time count=8 0.014-0.013
@@ -489,6 +489,14 @@ class roboticUSRecEnv(DirectRLEnv):
             self.surface_reconstructor.visualize("seg")
             self.vertebra_viewer.update_tip_vis(
                 self.human_to_ee_pos, self.human_to_ee_quat
+            )
+
+        if self.sim_cfg["vis_rec"]:
+            self.surface_reconstructor.update_plotter(
+                self.world_to_human_pos,
+                self.world_to_human_rot,
+                self.US_ee_pose_w[:, 0:3],
+                self.US_ee_pose_w[:, 3:7],
             )
 
         return observations

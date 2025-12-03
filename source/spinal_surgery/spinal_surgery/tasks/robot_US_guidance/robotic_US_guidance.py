@@ -445,9 +445,9 @@ class roboticUSEnv(DirectRLEnv):
                     retain_accelerations=False,
                     linear_damping=0.0,
                     angular_damping=0.0,
-                    max_linear_velocity=1000.0,
-                    max_angular_velocity=1000.0,
-                    max_depenetration_velocity=1.0,
+                    max_linear_velocity=0.000001,
+                    max_angular_velocity=0.000001,
+                    max_depenetration_velocity=0.00001,
                     solver_position_iteration_count=8,
                     solver_velocity_iteration_count=0,
                 ),
@@ -528,6 +528,14 @@ class roboticUSEnv(DirectRLEnv):
 
         if self.sim_cfg["vis_us"] and self.num_step % self.sim_cfg["vis_int"] == 0:
             self.US_slicer.visualize(self.observation_mode)
+
+        if self.sim_cfg["vis_seg_map"]:
+            self.US_slicer.update_plotter(
+                self.world_to_human_pos,
+                self.world_to_human_rot,
+                self.US_ee_pose_w[:, 0:3],
+                self.US_ee_pose_w[:, 3:7],
+            )
 
         return observations
 
