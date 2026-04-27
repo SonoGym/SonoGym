@@ -1,0 +1,14 @@
+{
+  "benchmark": "SonoGym",
+  "task_name": "",
+  "seed": null,
+  "sonogym_commit": "",
+  "isaaclab_version": "",
+  "asset_source": "",
+  "dataset_source": "",
+  "policy_type": "",
+  "checkpoint_path": "",
+  "replay_command": "",
+  "output_artifact_directory": "",
+  "notes": ""
+}
