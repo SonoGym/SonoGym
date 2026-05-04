@@ -34,7 +34,7 @@ parser.add_argument(
     "--num_traj", type=int, default=2048, help="Number of environments to simulate."
 )
 parser.add_argument(
-    "--if_record", type=bool, default=True, help="if record data to lerobot"
+    "--if_record", type=bool, default=False, help="if record data to lerobot"
 )
 
 # append AppLauncher cli args
@@ -43,7 +43,7 @@ AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
 # launch omniverse app
-app_launcher = AppLauncher(headless=args_cli.headless)
+app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 """Rest everything follows."""
@@ -58,7 +58,11 @@ import cProfile
 import wandb
 from spinal_surgery.lab.controllers.expert_guidance import ExpertGuidance
 from spinal_surgery.lab.controllers.expert_surgery import ExpertSurgery
-from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
+# LeRobotDataset is only needed when --if_record is set; defer the import so this
+# script can run in environments where ``lerobot`` isn't installed.
+LeRobotDataset = None
+if args_cli.if_record:
+    from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from spinal_surgery.tasks.robot_US_guidance.cfgs.lerobot_cfg import *
 from spinal_surgery.tasks.robot_US_guided_surgery.cfgs.lerobot_cfg import *
 import tqdm

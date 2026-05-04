@@ -14,7 +14,7 @@ models:
     initial_log_std: 0.0
     network:
       - name: features_extractor
-        input: STATES["image"]  # PyTorch NHWC -> NCHW
+        input: OBSERVATIONS["image"]  # PyTorch NHWC -> NCHW
         layers:
           - conv2d: {out_channels: 32, kernel_size: 8, stride: 2, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
@@ -22,11 +22,11 @@ models:
           - flatten
         activations: relu
       - name: net_pos
-        input: STATES["pos"]
+        input: OBSERVATIONS["pos"]
         layers: [128, 128, 64]
         activations: elu
       - name: net_quat
-        input: STATES["quat"]
+        input: OBSERVATIONS["quat"]
         layers: [128, 128, 64]
         activations: elu
       - name: net
@@ -39,7 +39,7 @@ models:
     clip_actions: False
     network:
       - name: features_extractor
-        input: STATES["image"]  # PyTorch NHWC -> NCHW
+        input: OBSERVATIONS["image"]  # PyTorch NHWC -> NCHW
         layers:
           - conv2d: {out_channels: 32, kernel_size: 8, stride: 2, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
@@ -47,11 +47,11 @@ models:
           - flatten
         activations: relu
       - name: net_pos
-        input: STATES["pos"]
+        input: OBSERVATIONS["pos"]
         layers: [128, 128, 64]
         activations: elu
       - name: net_quat
-        input: STATES["quat"]
+        input: OBSERVATIONS["quat"]
         layers: [128, 128, 64]
         activations: elu
       - name: act_net
@@ -68,7 +68,7 @@ models:
     clip_actions: False
     network:
       - name: features_extractor
-        input: STATES["image"]  # PyTorch NHWC -> NCHW
+        input: OBSERVATIONS["image"]  # PyTorch NHWC -> NCHW
         layers:
           - conv2d: {out_channels: 32, kernel_size: 8, stride: 2, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
@@ -76,11 +76,11 @@ models:
           - flatten
         activations: relu
       - name: net_pos
-        input: STATES["pos"]
+        input: OBSERVATIONS["pos"]
         layers: [128, 128, 64]
         activations: elu
       - name: net_quat
-        input: STATES["quat"]
+        input: OBSERVATIONS["quat"]
         layers: [128, 128, 64]
         activations: elu
       - name: act_net
@@ -97,7 +97,7 @@ models:
     clip_actions: False
     network:
       - name: features_extractor
-        input: STATES["image"]  # PyTorch NHWC -> NCHW
+        input: OBSERVATIONS["image"]  # PyTorch NHWC -> NCHW
         layers:
           - conv2d: {out_channels: 32, kernel_size: 8, stride: 2, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
@@ -105,11 +105,11 @@ models:
           - flatten
         activations: relu
       - name: net_pos
-        input: STATES["pos"]
+        input: OBSERVATIONS["pos"]
         layers: [128, 128, 64]
         activations: elu
       - name: net_quat
-        input: STATES["quat"]
+        input: OBSERVATIONS["quat"]
         layers: [128, 128, 64]
         activations: elu
       - name: act_net
@@ -126,7 +126,7 @@ models:
     clip_actions: False
     network:
       - name: features_extractor
-        input: STATES["image"]  # PyTorch NHWC -> NCHW
+        input: OBSERVATIONS["image"]  # PyTorch NHWC -> NCHW
         layers:
           - conv2d: {out_channels: 32, kernel_size: 8, stride: 2, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
@@ -134,11 +134,11 @@ models:
           - flatten
         activations: relu
       - name: net_pos
-        input: STATES["pos"]
+        input: OBSERVATIONS["pos"]
         layers: [128, 128, 64]
         activations: elu
       - name: net_quat
-        input: STATES["quat"]
+        input: OBSERVATIONS["quat"]
         layers: [128, 128, 64]
         activations: elu
       - name: act_net

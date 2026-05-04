@@ -16,7 +16,7 @@ models:
     initial_log_std: 0.0
     network:
       - name: features_extractor
-        input: STATES["reconstruction"]  # PyTorch NHWC -> NCHW
+        input: OBSERVATIONS["reconstruction"]  # PyTorch NHWC -> NCHW
         layers:
           - conv2d: {out_channels: 32, kernel_size: 8, stride: 2, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
@@ -37,7 +37,7 @@ models:
     initial_log_std: 0.0
     network:
       - name: features_extractor
-        input: STATES["reconstruction"]  # PyTorch NHWC -> NCHW
+        input: OBSERVATIONS["reconstruction"]  # PyTorch NHWC -> NCHW
         layers:
           - conv2d: {out_channels: 32, kernel_size: 8, stride: 2, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
@@ -54,7 +54,7 @@ models:
     clip_actions: False
     network:
       - name: features_extractor
-        input: STATES["reconstruction"]  # PyTorch NHWC -> NCHW
+        input: OBSERVATIONS["reconstruction"]  # PyTorch NHWC -> NCHW
         layers:
           - conv2d: {out_channels: 32, kernel_size: 8, stride: 2, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
@@ -75,7 +75,7 @@ models:
     clip_actions: False
     network:
       - name: features_extractor
-        input: STATES["reconstruction"]  # PyTorch NHWC -> NCHW
+        input: OBSERVATIONS["reconstruction"]  # PyTorch NHWC -> NCHW
         layers:
           - conv2d: {out_channels: 32, kernel_size: 8, stride: 2, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
@@ -96,7 +96,7 @@ models:
     clip_actions: False
     network:
       - name: features_extractor
-        input: STATES["reconstruction"]  # PyTorch NHWC -> NCHW
+        input: OBSERVATIONS["reconstruction"]  # PyTorch NHWC -> NCHW
         layers:
           - conv2d: {out_channels: 32, kernel_size: 8, stride: 2, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
@@ -117,7 +117,7 @@ models:
     clip_actions: False
     network:
       - name: features_extractor
-        input: STATES["reconstruction"]  # PyTorch NHWC -> NCHW
+        input: OBSERVATIONS["reconstruction"]  # PyTorch NHWC -> NCHW
         layers:
           - conv2d: {out_channels: 32, kernel_size: 8, stride: 2, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}

@@ -1,56 +1,67 @@
+from __future__ import annotations
+
+import dataclasses
+import sys
 from typing import List, Optional, Union
 
-import copy
-import sys
+import torch
 import tqdm
 
-import torch
-
 from skrl.agents.torch import Agent
-from skrl.envs.wrappers.torch import Wrapper
+from skrl.envs.wrappers.torch import MultiAgentEnvWrapper, Wrapper
+from skrl.multi_agents.torch import MultiAgent
 from skrl.trainers.torch import Trainer
+from skrl.trainers.torch.sequential import SequentialTrainerCfg
+from skrl.utils import ScopedTimer
 
 
-# fmt: off
-# [start-config-dict-torch]
-SEQUENTIAL_TRAINER_DEFAULT_CONFIG = {
-    "timesteps": 100000,            # number of timesteps to train for
-    "headless": False,              # whether to use headless mode (no rendering)
-    "disable_progressbar": False,   # whether to disable the progressbar. If None, disable on non-TTY
-    "close_environment_at_exit": True,   # whether to close the environment on normal program termination
-    "environment_info": "episode",       # key used to get and log environment info
-    "stochastic_evaluation": False,      # whether to use actions rather than (deterministic) mean actions during evaluation
+@dataclasses.dataclass(kw_only=True)
+class SafetyFilterSequentialTrainerCfg(SequentialTrainerCfg):
+    """Configuration for the safety-filter sequential trainer (alias of the base cfg)."""
+
+
+# Backwards-compatible default-config dict.
+SEQUENTIAL_TRAINER_DEFAULT_CONFIG: dict = {
+    "timesteps": 100000,
+    "headless": False,
+    "render_interval": 1,
+    "disable_progressbar": False,
+    "close_environment_at_exit": True,
+    "environment_info": "episode",
+    "stochastic_evaluation": False,
 }
-# [end-config-dict-torch]
-# fmt: on
 
 
 class SafetyFilterSequentialTrainer(Trainer):
+    """Sequential trainer compatible with skrl 2.x.
+
+    For a single agent the parent ``Trainer.train`` / ``Trainer.eval`` already implement
+    the loop we need; this class delegates to them. The simultaneous-agent path is
+    re-implemented to keep the previous behavior.
+    """
+
     def __init__(
         self,
-        env: Wrapper,
-        agents: Union[Agent, List[Agent]],
+        env: Union[Wrapper, MultiAgentEnvWrapper],
+        agents: Union[Agent, MultiAgent, List[Agent], List[MultiAgent]],
         agents_scope: Optional[List[int]] = None,
-        cfg: Optional[dict] = None,
+        cfg: Optional[Union[SafetyFilterSequentialTrainerCfg, dict]] = None,
     ) -> None:
-        """Sequential trainer
+        if cfg is None:
+            cfg = {}
+        if isinstance(cfg, dict):
+            # filter to only fields known by the dataclass
+            valid_keys = {f.name for f in dataclasses.fields(SafetyFilterSequentialTrainerCfg)}
+            trainer_cfg = SafetyFilterSequentialTrainerCfg(**{k: v for k, v in cfg.items() if k in valid_keys})
+        else:
+            trainer_cfg = cfg
 
-        Train agents sequentially (i.e., one after the other in each interaction with the environment)
-
-        :param env: Environment to train on
-        :type env: skrl.envs.wrappers.torch.Wrapper
-        :param agents: Agents to train
-        :type agents: Union[Agent, List[Agent]]
-        :param agents_scope: Number of environments for each agent to train on (default: ``None``)
-        :type agents_scope: tuple or list of int, optional
-        :param cfg: Configuration dictionary (default: ``None``).
-                    See SEQUENTIAL_TRAINER_DEFAULT_CONFIG for default values
-        :type cfg: dict, optional
-        """
-        _cfg = copy.deepcopy(SEQUENTIAL_TRAINER_DEFAULT_CONFIG)
-        _cfg.update(cfg if cfg is not None else {})
-        agents_scope = agents_scope if agents_scope is not None else []
-        super().__init__(env=env, agents=agents, agents_scope=agents_scope, cfg=_cfg)
+        super().__init__(
+            env=env,
+            agents=agents,
+            scopes=agents_scope if agents_scope is not None else [],
+            cfg=trainer_cfg,
+        )
 
         # init agents
         if self.num_simultaneous_agents > 1:
@@ -60,186 +71,171 @@ class SafetyFilterSequentialTrainer(Trainer):
             self.agents.init(trainer_cfg=self.cfg)
 
     def train(self) -> None:
-        """Train the agents sequentially
-
-        This method executes the following steps in loop:
-
-        - Pre-interaction (sequentially)
-        - Compute actions (sequentially)
-        - Interact with the environments
-        - Render scene
-        - Record transitions (sequentially)
-        - Post-interaction (sequentially)
-        - Reset environments
-        """
-        # set running mode
+        # set training mode
         if self.num_simultaneous_agents > 1:
             for agent in self.agents:
-                agent.set_running_mode("train")
+                agent.enable_training_mode(True)
         else:
-            self.agents.set_running_mode("train")
+            self.agents.enable_training_mode(True)
 
-        # non-simultaneous agents
+        # single agent: defer to the base trainer's loop (works for vec envs)
         if self.num_simultaneous_agents == 1:
-            # single-agent
-            if self.env.num_agents == 1:
-                self.single_agent_train()
-            # multi-agent
-            else:
-                self.multi_agent_train()
+            super().train()
             return
 
-        # reset env
-        states, infos = self.env.reset()
+        # simultaneous agents
+        observations, infos = self.env.reset()
+        states = self.env.state()
 
         for timestep in tqdm.tqdm(
-            range(self.initial_timestep, self.timesteps), disable=self.disable_progressbar, file=sys.stdout
+            range(self.cfg.timesteps), disable=self.cfg.disable_progressbar, file=sys.stdout
         ):
-
-            # pre-interaction
             for agent in self.agents:
-                agent.pre_interaction(timestep=timestep, timesteps=self.timesteps)
+                agent.pre_interaction(timestep=timestep, timesteps=self.cfg.timesteps)
 
             with torch.no_grad():
-                # compute actions
-                org_actions = torch.vstack(
-                    [
-                        agent.act(states[scope[0] : scope[1]], timestep=timestep, timesteps=self.timesteps)[0]
-                        for agent, scope in zip(self.agents, self.agents_scope)
-                    ]
-                )
-                # taken_actions = torch.vstack(
-                #     [
-                #         agent.act(states[scope[0] : scope[1]], timestep=timestep, timesteps=self.timesteps)[1]
-                #         for agent, scope in zip(self.agents, self.agents_scope)
-                #     ]
-                # )
+                _actions, _outputs = [], []
+                for agent, scope in zip(self.agents, self.scopes):
+                    with ScopedTimer() as timer:
+                        actions, outputs = agent.act(
+                            observations[scope[0] : scope[1]],
+                            states[scope[0] : scope[1]] if states is not None else None,
+                            timestep=timestep,
+                            timesteps=self.cfg.timesteps,
+                        )
+                        agent.track_data("Stats / Inference time (ms)", timer.elapsed_time_ms)
+                    _actions.append(actions)
+                    _outputs.append(outputs)
+                actions = torch.vstack(_actions)
 
-                # step the environments
-                next_states, rewards, terminated, truncated, infos = self.env.step(org_actions)
+                with ScopedTimer() as timer:
+                    next_observations, rewards, terminated, truncated, infos = self.env.step(actions)
+                    next_states = self.env.state()
+                    elapsed_time_ms = timer.elapsed_time_ms
+                    for agent in self.agents:
+                        agent.track_data("Stats / Env stepping time (ms)", elapsed_time_ms)
 
-                # render scene
-                if not self.headless:
+                if not self.cfg.headless and not timestep % self.cfg.render_interval:
                     self.env.render()
 
-                # record the environments' transitions
-                for agent, scope in zip(self.agents, self.agents_scope):
+                for agent, scope in zip(self.agents, self.scopes):
                     agent.record_transition(
-                        states=states[scope[0] : scope[1]],
-                        actions=org_actions[scope[0] : scope[1]],
-                        rewards=rewards[scope[0] : scope[1]],
-                        next_states=next_states[scope[0] : scope[1]],
-                        terminated=terminated[scope[0] : scope[1]],
-                        truncated=truncated[scope[0] : scope[1]],
-                        infos=infos,
-                        timestep=timestep,
-                        timesteps=self.timesteps,
-                    )
-
-                # log environment info
-                if self.environment_info in infos:
-                    for k, v in infos[self.environment_info].items():
-                        if isinstance(v, torch.Tensor) and v.numel() == 1:
-                            for agent in self.agents:
-                                agent.track_data(f"Info / {k}", v.item())
-
-            # post-interaction
-            for agent in self.agents:
-                agent.post_interaction(timestep=timestep, timesteps=self.timesteps)
-
-            # reset environments
-            if terminated.any() or truncated.any():
-                with torch.no_grad():
-                    states, infos = self.env.reset()
-            else:
-                states = next_states
-
-    def eval(self) -> None:
-        """Evaluate the agents sequentially
-
-        This method executes the following steps in loop:
-
-        - Compute actions (sequentially)
-        - Interact with the environments
-        - Render scene
-        - Reset environments
-        """
-        # set running mode
-        if self.num_simultaneous_agents > 1:
-            for agent in self.agents:
-                agent.set_running_mode("eval")
-        else:
-            self.agents.set_running_mode("eval")
-
-        # non-simultaneous agents
-        if self.num_simultaneous_agents == 1:
-            # single-agent
-            if self.env.num_agents == 1:
-                self.single_agent_eval()
-            # multi-agent
-            else:
-                self.multi_agent_eval()
-            return
-
-        # reset env
-        states, infos = self.env.reset()
-
-        for timestep in tqdm.tqdm(
-            range(self.initial_timestep, self.timesteps), disable=self.disable_progressbar, file=sys.stdout
-        ):
-
-            # pre-interaction
-            for agent in self.agents:
-                agent.pre_interaction(timestep=timestep, timesteps=self.timesteps)
-
-            with torch.no_grad():
-                # compute actions
-                outputs = [
-                    agent.act(states[scope[0] : scope[1]], timestep=timestep, timesteps=self.timesteps)
-                    for agent, scope in zip(self.agents, self.agents_scope)
-                ]
-                actions = torch.vstack(
-                    [
-                        output[0] if self.stochastic_evaluation else output[-1].get("mean_actions", output[0])
-                        for output in outputs
-                    ]
-                )
-
-                # step the environments
-                next_states, rewards, terminated, truncated, infos = self.env.step(actions)
-
-                # render scene
-                if not self.headless:
-                    self.env.render()
-
-                # write data to TensorBoard
-                for agent, scope in zip(self.agents, self.agents_scope):
-                    agent.record_transition(
-                        states=states[scope[0] : scope[1]],
+                        observations=observations[scope[0] : scope[1]],
+                        states=states[scope[0] : scope[1]] if states is not None else None,
                         actions=actions[scope[0] : scope[1]],
                         rewards=rewards[scope[0] : scope[1]],
-                        next_states=next_states[scope[0] : scope[1]],
+                        next_observations=next_observations[scope[0] : scope[1]],
+                        next_states=next_states[scope[0] : scope[1]] if next_states is not None else None,
                         terminated=terminated[scope[0] : scope[1]],
                         truncated=truncated[scope[0] : scope[1]],
                         infos=infos,
                         timestep=timestep,
-                        timesteps=self.timesteps,
+                        timesteps=self.cfg.timesteps,
                     )
 
-                # log environment info
-                if self.environment_info in infos:
-                    for k, v in infos[self.environment_info].items():
+                if self.cfg.environment_info in infos:
+                    for k, v in infos[self.cfg.environment_info].items():
                         if isinstance(v, torch.Tensor) and v.numel() == 1:
                             for agent in self.agents:
-                                agent.track_data(f"Info / {k}", v.item())
+                                agent.track_data(k if "/" in k else f"Info / {k}", v.item())
 
-            # post-interaction
             for agent in self.agents:
-                super(type(agent), agent).post_interaction(timestep=timestep, timesteps=self.timesteps)
+                agent.post_interaction(timestep=timestep, timesteps=self.cfg.timesteps)
 
-            # reset environments
-            if terminated.any() or truncated.any():
-                with torch.no_grad():
-                    states, infos = self.env.reset()
-            else:
+            if self.env.num_envs > 1:
+                observations = next_observations
                 states = next_states
+            else:
+                if terminated.any() or truncated.any():
+                    with torch.no_grad():
+                        observations, infos = self.env.reset()
+                        states = self.env.state()
+                else:
+                    observations = next_observations
+                    states = next_states
+
+    def eval(self) -> None:
+        # set evaluation mode
+        if self.num_simultaneous_agents > 1:
+            for agent in self.agents:
+                agent.enable_training_mode(False)
+        else:
+            self.agents.enable_training_mode(False)
+
+        # single agent: defer to the base trainer's loop
+        if self.num_simultaneous_agents == 1:
+            super().eval()
+            return
+
+        # simultaneous agents
+        observations, infos = self.env.reset()
+        states = self.env.state()
+
+        for timestep in tqdm.tqdm(
+            range(self.cfg.timesteps), disable=self.cfg.disable_progressbar, file=sys.stdout
+        ):
+            for agent in self.agents:
+                agent.pre_interaction(timestep=timestep, timesteps=self.cfg.timesteps)
+
+            with torch.no_grad():
+                _actions, _outputs = [], []
+                for agent, scope in zip(self.agents, self.scopes):
+                    with ScopedTimer() as timer:
+                        actions, outputs = agent.act(
+                            observations[scope[0] : scope[1]],
+                            states[scope[0] : scope[1]] if states is not None else None,
+                            timestep=timestep,
+                            timesteps=self.cfg.timesteps,
+                        )
+                        agent.track_data("Stats / Inference time (ms)", timer.elapsed_time_ms)
+                    chosen = actions if self.cfg.stochastic_evaluation else outputs.get("mean_actions", actions)
+                    _actions.append(chosen)
+                    _outputs.append(outputs)
+                actions = torch.vstack(_actions)
+
+                with ScopedTimer() as timer:
+                    next_observations, rewards, terminated, truncated, infos = self.env.step(actions)
+                    next_states = self.env.state()
+                    elapsed_time_ms = timer.elapsed_time_ms
+                    for agent in self.agents:
+                        agent.track_data("Stats / Env stepping time (ms)", elapsed_time_ms)
+
+                if not self.cfg.headless and not timestep % self.cfg.render_interval:
+                    self.env.render()
+
+                for agent, scope in zip(self.agents, self.scopes):
+                    agent.record_transition(
+                        observations=observations[scope[0] : scope[1]],
+                        states=states[scope[0] : scope[1]] if states is not None else None,
+                        actions=actions[scope[0] : scope[1]],
+                        rewards=rewards[scope[0] : scope[1]],
+                        next_observations=next_observations[scope[0] : scope[1]],
+                        next_states=next_states[scope[0] : scope[1]] if next_states is not None else None,
+                        terminated=terminated[scope[0] : scope[1]],
+                        truncated=truncated[scope[0] : scope[1]],
+                        infos=infos,
+                        timestep=timestep,
+                        timesteps=self.cfg.timesteps,
+                    )
+
+                if self.cfg.environment_info in infos:
+                    for k, v in infos[self.cfg.environment_info].items():
+                        if isinstance(v, torch.Tensor) and v.numel() == 1:
+                            for agent in self.agents:
+                                agent.track_data(k if "/" in k else f"Info / {k}", v.item())
+
+            # eval: do checkpointing/logging side-effects only (skip the algorithm update)
+            for agent in self.agents:
+                super(agent.__class__, agent).post_interaction(timestep=timestep, timesteps=self.cfg.timesteps)
+
+            if self.env.num_envs > 1:
+                observations = next_observations
+                states = next_states
+            else:
+                if terminated.any() or truncated.any():
+                    with torch.no_grad():
+                        observations, infos = self.env.reset()
+                        states = self.env.state()
+                else:
+                    observations = next_observations
+                    states = next_states

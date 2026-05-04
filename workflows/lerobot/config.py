@@ -3,8 +3,8 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from lerobot.common import envs, policies  # noqa: F401
-from lerobot.common.utils.utils import auto_select_torch_device, is_amp_available, is_torch_device_available
+from lerobot import envs, policies  # noqa: F401
+from lerobot.utils.utils import auto_select_torch_device, is_amp_available, is_torch_device_available
 from lerobot.configs import parser
 from lerobot.configs.default import EvalConfig
 from lerobot.configs.policies import PreTrainedConfig

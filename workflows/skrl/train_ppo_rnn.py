@@ -55,6 +55,7 @@ simulation_app = app_launcher.app
 
 """Rest everything follows."""
 
+import dataclasses
 import gymnasium as gym
 import os
 import random
@@ -64,18 +65,13 @@ import skrl
 from packaging import version
 
 # check for minimum supported skrl version
-SKRL_VERSION = "1.4.1"
+SKRL_VERSION = "2.0.0"
 if version.parse(skrl.__version__) < version.parse(SKRL_VERSION):
     skrl.logger.error(
         f"Unsupported skrl version: {skrl.__version__}. "
         f"Install supported version using 'pip install skrl>={SKRL_VERSION}'"
     )
     exit()
-
-if args_cli.ml_framework.startswith("torch"):
-    from skrl.utils.runner.torch import Runner
-elif args_cli.ml_framework.startswith("jax"):
-    from skrl.utils.runner.jax import Runner
 
 from isaaclab.envs import (
     DirectMARLEnv,
@@ -86,21 +82,21 @@ from isaaclab.envs import (
 )
 from isaaclab.utils.assets import retrieve_file_path
 from isaaclab.utils.dict import print_dict
-from isaaclab.utils.io import dump_pickle, dump_yaml
+from isaaclab.utils.io import dump_yaml
 
 from isaaclab_rl.skrl import SkrlVecEnvWrapper
 
 import isaaclab_tasks  # noqa: F401
 import spinal_surgery
 from isaaclab_tasks.utils.hydra import hydra_task_config
-from skrl.agents.torch.ppo import PPO_RNN as PPO, PPO_DEFAULT_CONFIG
+from skrl.agents.torch.ppo import PPO_RNN, PPO_CFG
 from spinal_surgery.lab.agents.skrl_rnn_actor_critic import SharedModel
 import wandb
 from skrl.trainers.torch import SequentialTrainer
+from skrl.trainers.torch.sequential import SequentialTrainerCfg
 from skrl.memories.torch import RandomMemory
 from skrl.resources.schedulers.torch.kl_adaptive import KLAdaptiveLR
 from skrl.resources.preprocessors.torch.running_standard_scaler import RunningStandardScaler
-from spinal_surgery.tasks.robot_US_guided_surgery.robotic_US_guided_surgery import scene_cfg
 
 # PLACEHOLDER: Extension template (do not remove this comment)
 
@@ -108,13 +104,19 @@ from spinal_surgery.tasks.robot_US_guided_surgery.robotic_US_guided_surgery impo
 agent_cfg_entry_point = "skrl_ppo_rnn_cfg_entry_point"
 
 
-def update_config(default_cfg, new_cfg):
-    for k, v in new_cfg.items():
-        if isinstance(v, dict) and isinstance(default_cfg.get(k), dict):
-            update_config(default_cfg[k], v)
-        else:
-            default_cfg[k] = v
-    return default_cfg
+def _normalize_ppo_cfg(cfg: dict) -> dict:
+    """Map legacy yaml keys to the new PPO_CFG fields and drop unknown keys."""
+    cfg = dict(cfg)
+    if "lambda" in cfg and "gae_lambda" not in cfg:
+        cfg["gae_lambda"] = cfg.pop("lambda")
+    else:
+        cfg.pop("lambda", None)
+    cfg.pop("clip_predicted_values", None)
+    cfg.pop("rewards_shaper_scale", None)
+    cfg.pop("seed", None)
+    cfg.pop("class", None)
+    valid_keys = {f.name for f in dataclasses.fields(PPO_CFG)}
+    return {k: v for k, v in cfg.items() if k in valid_keys}
 
 
 @hydra_task_config(args_cli.task, agent_cfg_entry_point)
@@ -135,32 +137,25 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     if args_cli.seed == -1:
         args_cli.seed = random.randint(0, 10000)
 
-    # set the agent and environment seed from command line
-    # note: certain randomization occur in the environment initialization so we set the seed here
-    agent_cfg = update_config(PPO_DEFAULT_CONFIG, agent_cfg)
-    agent_cfg["seed"] = args_cli.seed if args_cli.seed is not None else agent_cfg["seed"]
+    agent_cfg["seed"] = args_cli.seed if args_cli.seed is not None else agent_cfg.get("seed")
     env_cfg.seed = agent_cfg["seed"]
 
     # specify directory for logging experiments
-    log_root_path = os.path.join("logs", "skrl", agent_cfg["experiment"]["directory"])
+    experiment_section = agent_cfg.setdefault("experiment", {})
+    log_root_path = os.path.join("logs", "skrl", experiment_section.get("directory", ""))
     log_root_path = os.path.abspath(log_root_path)
     print(f"[INFO] Logging experiment in directory: {log_root_path}")
-    # specify directory for logging runs: {time-stamp}_{run_name}
-    log_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + f"_ppol_{args_cli.ml_framework}"
+    log_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + f"_ppo_rnn_{args_cli.ml_framework}"
     print(f"Exact experiment name requested from command line {log_dir}")
-    if agent_cfg["experiment"]["experiment_name"]:
-        log_dir += f'_{agent_cfg["experiment"]["experiment_name"]}'
-    # set directory into agent config
-    agent_cfg["experiment"]["directory"] = log_root_path
-    agent_cfg["experiment"]["experiment_name"] = log_dir
-    # update log_dir
+    if experiment_section.get("experiment_name"):
+        log_dir += f'_{experiment_section["experiment_name"]}'
+    experiment_section["directory"] = log_root_path
+    experiment_section["experiment_name"] = log_dir
     log_dir = os.path.join(log_root_path, log_dir)
 
     # dump the configuration into log-directory
     dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)
     dump_yaml(os.path.join(log_dir, "params", "agent.yaml"), agent_cfg)
-    dump_pickle(os.path.join(log_dir, "params", "env.pkl"), env_cfg)
-    dump_pickle(os.path.join(log_dir, "params", "agent.pkl"), agent_cfg)
 
     # get checkpoint path (to resume training)
     resume_path = retrieve_file_path(args_cli.checkpoint) if args_cli.checkpoint else None
@@ -184,37 +179,39 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         env = gym.wrappers.RecordVideo(env, **video_kwargs)
 
     # wrap around environment for skrl
-    env = SkrlVecEnvWrapper(env, ml_framework=args_cli.ml_framework)  # same as: `wrap_env(env, wrapper="auto")`
+    env = SkrlVecEnvWrapper(env, ml_framework=args_cli.ml_framework)
 
-    # configure and instantiate the skrl runner
     models = {}
     device = env_cfg.sim.device
     models['policy'] = SharedModel(env.observation_space, env.action_space, device, num_envs=env.num_envs, clip_actions=False)
     models["value"] = models["policy"]
-    if agent_cfg['learning_rate_scheduler'] == "KLAdaptiveLR":
+    if agent_cfg.get('learning_rate_scheduler') == "KLAdaptiveLR":
         agent_cfg["learning_rate_scheduler"] = KLAdaptiveLR
-    if agent_cfg['value_preprocessor'] == "RunningStandardScaler":
+    if agent_cfg.get('value_preprocessor') == "RunningStandardScaler":
         agent_cfg["value_preprocessor"] = RunningStandardScaler
         agent_cfg["value_preprocessor_kwargs"] = {"size": 1, "device": device}
-    if agent_cfg['state_preprocessor'] == "RunningStandardScaler":
+    if agent_cfg.get('state_preprocessor') == "RunningStandardScaler":
         agent_cfg["state_preprocessor"] = RunningStandardScaler
         agent_cfg["state_preprocessor_kwargs"] = {'size': env.observation_space, "device": device}
 
     # Instantiate a RandomMemory (without replacement) as experience replay memory
     memory = RandomMemory(memory_size=agent_cfg['rollouts'], num_envs=env.num_envs, device=device, replacement=False)
 
-    ppol_agent = PPO(
+    ppo_cfg_dict = _normalize_ppo_cfg(agent_cfg)
+    ppo_cfg_dict["experiment"] = experiment_section
+
+    ppo_agent = PPO_RNN(
         models=models,
         memory=memory,
-        cfg=agent_cfg,
+        cfg=ppo_cfg_dict,
         observation_space=env.observation_space,
         action_space=env.action_space,
-        device=device
+        device=device,
     )
 
     # Configure and instantiate the RL trainer
-    cfg_trainer = {"timesteps": 200000, "headless": True}
-    trainer = SequentialTrainer(cfg=cfg_trainer, env=env, agents=ppol_agent)
+    cfg_trainer = SequentialTrainerCfg(timesteps=200000, headless=True)
+    trainer = SequentialTrainer(cfg=cfg_trainer, env=env, agents=ppo_agent)
 
     # start training
     trainer.train()

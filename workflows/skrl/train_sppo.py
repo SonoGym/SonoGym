@@ -22,7 +22,7 @@ parser = argparse.ArgumentParser(description="Train an RL agent with skrl.")
 parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
 parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
 parser.add_argument("--video_interval", type=int, default=2000, help="Interval between video recordings (in steps).")
-parser.add_argument("--num_envs", type=int, default=128, help="Number of environments to simulate.")
+parser.add_argument("--num_envs", type=int, default=32, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default='Isaac-robot-US-guided-surgery-v0', help="Name of the task.")
 parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
 parser.add_argument(
@@ -86,7 +86,7 @@ from isaaclab.envs import (
 )
 from isaaclab.utils.assets import retrieve_file_path
 from isaaclab.utils.dict import print_dict
-from isaaclab.utils.io import dump_pickle, dump_yaml
+from isaaclab.utils.io import dump_yaml
 
 from isaaclab_rl.skrl import SkrlVecEnvWrapper
 
@@ -102,6 +102,7 @@ from skrl.memories.torch import RandomMemory
 from skrl.resources.schedulers.torch.kl_adaptive import KLAdaptiveLR
 from skrl.resources.preprocessors.torch.running_standard_scaler import RunningStandardScaler
 from spinal_surgery.tasks.robot_US_guided_surgery.robotic_US_guided_surgery import scene_cfg
+from skrl.trainers.torch.sequential import SequentialTrainerCfg
 
 # PLACEHOLDER: Extension template (do not remove this comment)
 
@@ -160,8 +161,6 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # dump the configuration into log-directory
     dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)
     dump_yaml(os.path.join(log_dir, "params", "agent.yaml"), agent_cfg)
-    dump_pickle(os.path.join(log_dir, "params", "env.pkl"), env_cfg)
-    dump_pickle(os.path.join(log_dir, "params", "agent.pkl"), agent_cfg)
 
     # get checkpoint path (to resume training)
     resume_path = retrieve_file_path(args_cli.checkpoint) if args_cli.checkpoint else None
@@ -212,7 +211,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     )
 
     # Configure and instantiate the RL trainer
-    cfg_trainer = {"timesteps": 200000, "headless": True}
+    cfg_trainer = SequentialTrainerCfg(timesteps=200000, headless=True)
     trainer = SequentialTrainer(cfg=cfg_trainer, env=env, agents=ppol_agent)
 
     # start training

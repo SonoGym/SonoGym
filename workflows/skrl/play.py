@@ -70,7 +70,7 @@ import skrl
 from packaging import version
 
 # check for minimum supported skrl version
-SKRL_VERSION = "1.4.1"
+SKRL_VERSION = "2.0.0"
 if version.parse(skrl.__version__) < version.parse(SKRL_VERSION):
     skrl.logger.error(
         f"Unsupported skrl version: {skrl.__version__}. "
@@ -85,7 +85,7 @@ elif args_cli.ml_framework.startswith("jax"):
 
 from isaaclab.envs import DirectMARLEnv, multi_agent_to_single_agent
 from isaaclab.utils.dict import print_dict
-from isaaclab.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
+from isaaclab_rl.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
 
 from isaaclab_rl.skrl import SkrlVecEnvWrapper
 
@@ -158,8 +158,11 @@ def main():
         print_dict(video_kwargs, nesting=4)
         env = gym.wrappers.RecordVideo(env, **video_kwargs)
 
-    # init wandb
-    wandb.init(project=args_cli.task, config=env_cfg)
+    # init wandb (best-effort; eval doesn't need it, so don't crash on network errors)
+    try:
+        wandb.init(project=args_cli.task, config=env_cfg, settings=wandb.Settings(init_timeout=15))
+    except Exception as e:
+        print(f"[WARN] wandb.init failed ({e}); continuing without wandb logging.")
 
     # wrap around environment for skrl
     env = SkrlVecEnvWrapper(env, ml_framework=args_cli.ml_framework)  # same as: `wrap_env(env, wrapper="auto")`
@@ -174,10 +177,11 @@ def main():
     print(f"[INFO] Loading model checkpoint from: {resume_path}")
     runner.agent.load(resume_path)
     # set agent to evaluation mode
-    runner.agent.set_running_mode("eval")
+    runner.agent.enable_training_mode(False)
 
     # reset environment
     obs, _ = env.reset()
+    states = env.state()
     timestep = 0
     # simulate environment
     while simulation_app.is_running():
@@ -186,15 +190,16 @@ def main():
         # run everything in inference mode
         with torch.inference_mode():
             # agent stepping
-            outputs = runner.agent.act(obs, timestep=0, timesteps=0)
+            sampled_actions, outputs = runner.agent.act(obs, states, timestep=0, timesteps=0)
             # - multi-agent (deterministic) actions
             if hasattr(env, "possible_agents"):
-                actions = {a: outputs[-1][a].get("mean_actions", outputs[0][a]) for a in env.possible_agents}
+                actions = {a: outputs[a].get("mean_actions", sampled_actions[a]) for a in env.possible_agents}
             # - single-agent (deterministic) actions
             else:
-                actions = outputs[-1].get("mean_actions", outputs[0])
+                actions = outputs.get("mean_actions", sampled_actions)
             # env stepping
             obs, _, _, _, _ = env.step(actions)
+            states = env.state()
         if args_cli.video:
             timestep += 1
             # exit the play loop after recording one video

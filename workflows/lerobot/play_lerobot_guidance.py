@@ -10,10 +10,10 @@ from the current state of the simulation.
 """
 import torch
 
-from lerobot.common.datasets.lerobot_dataset import LeRobotDatasetMetadata
-from lerobot.common.policies.factory import make_policy
-from lerobot.common.policies.pretrained import PreTrainedPolicy
-from lerobot.common.utils.utils import get_safe_torch_device
+from lerobot.datasets.lerobot_dataset import LeRobotDatasetMetadata
+from lerobot.policies.factory import make_policy
+from lerobot.policies.pretrained import PreTrainedPolicy
+from lerobot.utils.utils import get_safe_torch_device
 from lerobot.configs import parser
 from config import *
 
@@ -34,7 +34,7 @@ def main(cfg: EvalPipelineConfig):
 
     from isaaclab.envs import DirectMARLEnv, multi_agent_to_single_agent
     from isaaclab.utils.dict import print_dict
-    from isaaclab.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
+    from isaaclab_rl.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
 
     import isaaclab_tasks  # noqa: F401
     from isaaclab_tasks.utils import get_checkpoint_path, load_cfg_from_registry, parse_env_cfg

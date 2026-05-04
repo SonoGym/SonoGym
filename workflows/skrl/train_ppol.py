@@ -22,7 +22,7 @@ parser = argparse.ArgumentParser(description="Train an RL agent with skrl.")
 parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
 parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
 parser.add_argument("--video_interval", type=int, default=2000, help="Interval between video recordings (in steps).")
-parser.add_argument("--num_envs", type=int, default=128, help="Number of environments to simulate.")
+parser.add_argument("--num_envs", type=int, default=32, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default='Isaac-robot-US-guided-surgery-v0', help="Name of the task.")
 parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
 parser.add_argument(
@@ -64,18 +64,13 @@ import skrl
 from packaging import version
 
 # check for minimum supported skrl version
-SKRL_VERSION = "1.4.1"
+SKRL_VERSION = "2.0.0"
 if version.parse(skrl.__version__) < version.parse(SKRL_VERSION):
     skrl.logger.error(
         f"Unsupported skrl version: {skrl.__version__}. "
         f"Install supported version using 'pip install skrl>={SKRL_VERSION}'"
     )
     exit()
-
-if args_cli.ml_framework.startswith("torch"):
-    from skrl.utils.runner.torch import Runner
-elif args_cli.ml_framework.startswith("jax"):
-    from skrl.utils.runner.jax import Runner
 
 from isaaclab.envs import (
     DirectMARLEnv,
@@ -86,7 +81,7 @@ from isaaclab.envs import (
 )
 from isaaclab.utils.assets import retrieve_file_path
 from isaaclab.utils.dict import print_dict
-from isaaclab.utils.io import dump_pickle, dump_yaml
+from isaaclab.utils.io import dump_yaml
 
 from isaaclab_rl.skrl import SkrlVecEnvWrapper
 
@@ -97,6 +92,7 @@ from spinal_surgery.lab.agents.skrl_ppol_agent import PPOLagrangian, PPOL_DEFAUL
 from spinal_surgery.lab.agents.skrl_actor_critic import StochasticActor, Critic
 import wandb
 from skrl.trainers.torch import SequentialTrainer
+from skrl.trainers.torch.sequential import SequentialTrainerCfg
 from skrl.memories.torch import RandomMemory
 from skrl.resources.schedulers.torch.kl_adaptive import KLAdaptiveLR
 from skrl.resources.preprocessors.torch.running_standard_scaler import RunningStandardScaler
@@ -158,8 +154,6 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # dump the configuration into log-directory
     dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)
     dump_yaml(os.path.join(log_dir, "params", "agent.yaml"), agent_cfg)
-    dump_pickle(os.path.join(log_dir, "params", "env.pkl"), env_cfg)
-    dump_pickle(os.path.join(log_dir, "params", "agent.pkl"), agent_cfg)
 
     # get checkpoint path (to resume training)
     resume_path = retrieve_file_path(args_cli.checkpoint) if args_cli.checkpoint else None
@@ -183,17 +177,16 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         env = gym.wrappers.RecordVideo(env, **video_kwargs)
 
     # wrap around environment for skrl
-    env = SkrlVecEnvWrapper(env, ml_framework=args_cli.ml_framework)  # same as: `wrap_env(env, wrapper="auto")`
+    env = SkrlVecEnvWrapper(env, ml_framework=args_cli.ml_framework)
 
-    # configure and instantiate the skrl runner
     models = {}
     device = env_cfg.sim.device
     models["policy"] = StochasticActor(env.observation_space, env.action_space, device, clip_actions=False)
     models["value"] = Critic(env.observation_space, env.action_space, device)
     models["cost_value"] = Critic(env.observation_space, env.action_space, device)
-    if agent_cfg['learning_rate_scheduler'] == "KLAdaptiveLR":
+    if agent_cfg.get('learning_rate_scheduler') == "KLAdaptiveLR":
         agent_cfg["learning_rate_scheduler"] = KLAdaptiveLR
-    if agent_cfg['value_preprocessor'] == "RunningStandardScaler":
+    if agent_cfg.get('value_preprocessor') == "RunningStandardScaler":
         agent_cfg["value_preprocessor"] = RunningStandardScaler
         agent_cfg["value_preprocessor_kwargs"] = {'size': 1}
 
@@ -206,11 +199,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         cfg=agent_cfg,
         observation_space=env.observation_space,
         action_space=env.action_space,
-        device=device
+        device=device,
     )
 
     # Configure and instantiate the RL trainer
-    cfg_trainer = {"timesteps": 1000000, "headless": True}
+    cfg_trainer = SequentialTrainerCfg(timesteps=1000000, headless=True)
     trainer = SequentialTrainer(cfg=cfg_trainer, env=env, agents=ppol_agent)
 
     # start training

@@ -14,7 +14,7 @@ models:
     initial_log_std: 0.0
     network:
       - name: features_extractor
-        input: STATES["reconstruction"]  # PyTorch NHWC -> NCHW
+        input: OBSERVATIONS["reconstruction"]  # PyTorch NHWC -> NCHW
         layers:
           - conv2d: {out_channels: 32, kernel_size: 8, stride: 2, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
@@ -22,7 +22,7 @@ models:
           - flatten
         activations: relu
       - name: net_length
-        input: STATES["cur_length"]
+        input: OBSERVATIONS["cur_length"]
         layers: [128, 128, 64]
         activations: elu
       - name: net
@@ -35,7 +35,7 @@ models:
     clip_actions: False
     network:
       - name: features_extractor
-        input: STATES["reconstruction"]  # PyTorch NHWC -> NCHW
+        input: OBSERVATIONS["reconstruction"]  # PyTorch NHWC -> NCHW
         layers:
           - conv2d: {out_channels: 32, kernel_size: 8, stride: 2, padding: 0}
           - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
@@ -43,7 +43,7 @@ models:
           - flatten
         activations: relu
       - name: net_length
-        input: STATES["cur_length"]
+        input: OBSERVATIONS["cur_length"]
         layers: [128, 128, 64]
         activations: elu
       - name: net
@@ -69,7 +69,7 @@ agent:
   learning_epochs: 3
   mini_batches: 32
   discount_factor: 0.99
-  lambda: 0.95
+  gae_lambda: 0.95
   learning_rate: 1.0e-04
   learning_rate_scheduler: KLAdaptiveLR
   learning_rate_scheduler_kwargs:
