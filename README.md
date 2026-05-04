@@ -16,7 +16,7 @@ Our platform enables benchmarking of various algorithms, including reinforcement
 
 ## Installation
 ### Install codes
-- Install Isaac Lab by following the [installation guide](https://isaac-sim.github.io/IsaacLab/v2.1.0/source/setup/installation/pip_installation.html) (IsaacLab V2.1.0). We recommend using the conda installation as it simplifies calling Python scripts from the terminal.
+- Install Isaac Lab by following the [installation guide](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/pip_installation.html) (IsaacLab main). We recommend using the conda installation as it simplifies calling Python scripts from the terminal.
 
 - Clone this repository separately from the Isaac Lab installation (i.e. outside the `IsaacLab` directory):
 
